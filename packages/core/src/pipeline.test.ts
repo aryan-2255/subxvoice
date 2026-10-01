@@ -80,11 +80,20 @@ describe("Pipeline", () => {
       expect(llm.requests[0]?.system).toMatch(/transliteration/i);
     });
 
-    it("leaves the script alone by default", async () => {
+    it("transliterates by default (Roman is the out-of-the-box behaviour)", async () => {
       const llm = new FakeLlm("main theek hoon");
       const { pipeline, inserter } = setup("मैं ठीक हूँ", llm);
 
-      await pipeline.process(audio, "exact", {});
+      await pipeline.process(audio, "exact", {}); // no script option
+
+      expect(inserter.inserted).toEqual(["main theek hoon"]);
+    });
+
+    it("keeps the native script when explicitly asked", async () => {
+      const llm = new FakeLlm("main theek hoon");
+      const { pipeline, inserter } = setup("मैं ठीक हूँ", llm);
+
+      await pipeline.process(audio, "exact", {}, { script: "native" });
 
       expect(inserter.inserted).toEqual(["मैं ठीक हूँ"]);
       expect(llm.requests).toEqual([]);
@@ -122,6 +131,55 @@ describe("Pipeline", () => {
       expect(inserter.inserted).toEqual(["Main theek hoon."]);
       expect(llm.requests).toHaveLength(1);
       expect(llm.requests[0]?.system).toMatch(/Latin letters/);
+    });
+  });
+
+  describe("streaming session", () => {
+    // FakeStt has no startStream, so open() must buffer and fall back to transcribe().
+    it("buffers pushes and finalises on a batch-only plug", async () => {
+      const { pipeline, inserter } = setup("testing sub x voice today");
+
+      const session = await pipeline.open("exact", { appName: "Notes" });
+      session.push(audio.samples.subarray(0, 8000));
+      session.push(audio.samples.subarray(8000));
+      const outcome = await session.finish();
+
+      expect(outcome.kind).toBe("inserted");
+      expect(inserter.inserted).toEqual(["testing SUBXVoice today"]);
+    });
+
+    it("uses the plug's live stream when it has one", async () => {
+      const pushed: Int16Array[] = [];
+      let batchUsed = false;
+      const stt = {
+        id: "streamy",
+        capabilities: { streaming: true, codeSwitching: true, vocabularyHints: true },
+        transcribe: async () => {
+          batchUsed = true;
+          return { text: "should not be used", languages: [] };
+        },
+        startStream: async () => ({
+          push: (s: Int16Array) => pushed.push(s),
+          partial: () => "partial so far",
+          finish: async () => ({ text: "streamed words", languages: [] }),
+        }),
+      };
+      const inserter = new FakeInserter();
+      const pipeline = new Pipeline({
+        stt,
+        inserter,
+        history: new MemoryHistory(),
+        dictionary: new MemoryDictionary([]),
+      });
+
+      const session = await pipeline.open("exact", {});
+      session.push(audio.samples);
+      expect(session.partial()).toBe("partial so far");
+      await session.finish();
+
+      expect(pushed).toHaveLength(1); // went to the stream, not the buffer
+      expect(inserter.inserted).toEqual(["streamed words"]);
+      expect(batchUsed).toBe(false); // transcribe() was never touched
     });
   });
 });

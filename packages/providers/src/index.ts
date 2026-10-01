@@ -12,6 +12,10 @@ export interface ProviderConfig {
   baseUrl?: string;
   /** Pin the upstream provider where the vendor routes to several (OpenRouter). */
   only?: string[];
+  /** Preferred upstream providers in order, with fallback (OpenRouter). */
+  order?: string[];
+  /** Languages to bias STT toward (hints, not a restriction). Defaults to Hindi + English. */
+  languageHints?: string[];
 }
 
 // To add a vendor: create stt/<vendor>.ts (or llm/<vendor>.ts) implementing the
@@ -24,6 +28,7 @@ export function createStt(config: ProviderConfig): SttProvider {
         token: requireToken(config, "Soniox"),
         model: config.model,
         baseUrl: config.baseUrl,
+        languageHints: config.languageHints,
       });
     case "fake":
       return new FakeStt("hello from the fake speech-to-text provider");
@@ -40,6 +45,7 @@ export function createLlm(config: ProviderConfig): LlmProvider {
         model: config.model,
         baseUrl: config.baseUrl,
         only: config.only,
+        order: config.order,
       });
     case "fake":
       return new FakeLlm("Hello from the fake LLM provider.");

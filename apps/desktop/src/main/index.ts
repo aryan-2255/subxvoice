@@ -2,8 +2,11 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
+  type AudioClip,
   type DictionaryEntry,
+  type HistoryStore,
   type HotkeyBinding,
+  type Mode,
   type PermissionKind,
   Pipeline,
   type SessionRecord,
@@ -73,6 +76,22 @@ function assertPermissionKind(kind: unknown): PermissionKind {
   return kind as PermissionKind;
 }
 
+/** When no STT is configured, history still records the clip so nothing the user said is lost. */
+async function saveSilentRecord(history: HistoryStore, mode: Mode, clip: AudioClip): Promise<string> {
+  const record: SessionRecord = {
+    id: randomUUID(),
+    createdAt: Date.now(),
+    mode,
+    context: {},
+    rawText: "",
+    finalText: "",
+    audioMs: Math.round((clip.samples.length / clip.sampleRate) * 1000),
+    timings: { sttMs: 0, rulesMs: 0, llmMs: 0, insertMs: 0, totalMs: 0 },
+  };
+  await history.save(record);
+  return record.id;
+}
+
 function assertString(value: unknown, name: string): string {
   if (typeof value !== "string" || !value.trim() || value.length > 200) throw new Error(`Invalid ${name}`);
   return value.trim();
@@ -109,7 +128,7 @@ async function start(): Promise<void> {
   const dictionary = new JsonDictionaryStore(join(dataDir, "dictionary.json"));
   const settings = new JsonSettingsStore<AppSettings>(join(dataDir, "settings.json"), {
     hotkey: platform.hotkey.defaultBindings()[0]?.keys ?? "",
-    script: "native",
+    script: "roman",
     microphoneId: "",
   });
 
@@ -181,43 +200,49 @@ async function start(): Promise<void> {
       })
     : null;
 
-  const dictation = new DictationController(pill, mic, async (clip, mode) => {
+  const keepAudio = async (clip: AudioClip, id: string) => {
+    // Saved after the text is already at the cursor, so disk I/O never delays the paste.
     const audioMs = Math.round((clip.samples.length / clip.sampleRate) * 1000);
-    const keepAudio = async (id: string) => {
-      // After the text is already at the cursor, so disk I/O never delays the paste.
-      await history.attachAudio(id, await saveRecording(clip), audioMs);
-      notifyHistoryChanged();
-    };
-
-    if (!pipeline) {
-      const record: SessionRecord = {
-        id: randomUUID(),
-        createdAt: Date.now(),
-        mode,
-        context: {},
-        rawText: "",
-        finalText: "",
-        audioMs,
-        timings: { sttMs: 0, rulesMs: 0, llmMs: 0, insertMs: 0, totalMs: 0 },
-      };
-      await history.save(record);
-      await keepAudio(record.id);
-      return engines.problems[0] ?? "Speech-to-text is not configured";
-    }
-
-    const { script } = await settings.all();
-    const context = await platform.context.current().catch(() => ({}));
-    const outcome = await pipeline.process(clip, mode, context, {
-      script,
-      // Show the words as heard while the model is still cleaning them up.
-      onTranscript: (text) => pill.setState({ kind: "processing", message: text }),
-    });
-
-    if (outcome.kind === "empty") return "Nothing heard";
-    if (outcome.kind === "command") return `Command: ${outcome.command}`;
+    await history.attachAudio(id, await saveRecording(clip), audioMs);
     notifyHistoryChanged();
-    void keepAudio(outcome.record.id);
-    return outcome.record.finalText;
+  };
+
+  const dictation = new DictationController(pill, mic, {
+    async open(mode) {
+      // STT stream and the LLM connection open now, on key-press, so release→paste is just the tail.
+      if (!pipeline) {
+        return {
+          push: () => {},
+          finish: async (clip) => {
+            await keepAudio(clip, await saveSilentRecord(history, mode, clip));
+            return engines.problems[0] ?? "Speech-to-text is not configured";
+          },
+          cancel: () => {},
+        };
+      }
+      const { script } = await settings.all();
+      const context = await platform.context.current().catch(() => ({}));
+      const session = await pipeline.open(mode, context, {
+        script,
+        // Show the words as heard while the model is still cleaning them up.
+        onTranscript: (text) => pill.setState({ kind: "processing", message: text }),
+      });
+      return {
+        push: (samples) => session.push(samples),
+        finish: async (clip) => {
+          const outcome = await session.finish();
+          if (outcome.kind === "empty") return "Nothing heard";
+          if (outcome.kind === "command") return `Command: ${outcome.command}`;
+          notifyHistoryChanged();
+          void keepAudio(clip, outcome.record.id);
+          return outcome.record.finalText;
+        },
+        cancel: () => {
+          // Drain the stream so the socket closes instead of leaking.
+          void session.finish().catch(() => {});
+        },
+      };
+    },
   });
 
   ipcMain.handle(IPC.settingsGet, () => settings.all());

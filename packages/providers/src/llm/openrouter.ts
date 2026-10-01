@@ -16,8 +16,14 @@ export interface OpenRouterOptions {
   token: string;
   model?: string;
   baseUrl?: string;
-  /** Pin the upstream provider, e.g. ["groq"] for the lowest latency. */
+  /** Restrict routing to only these upstream providers. */
   only?: string[];
+  /**
+   * Preferred upstream providers, tried in order, with fallback to the rest. Benchmarked on
+   * Hindi-English: cerebras is fastest and most consistent (~450 ms), groq a close second — so
+   * cerebras first, groq as backup.
+   */
+  order?: string[];
 }
 
 interface ChatResponse {
@@ -52,7 +58,11 @@ export class OpenRouterLlm implements LlmProvider {
         temperature: 0,
         max_tokens: request.maxTokens ?? DEFAULT_MAX_TOKENS,
         reasoning: { effort: "low" },
-        ...(this.options.only ? { provider: { only: this.options.only } } : {}),
+        ...(this.options.order
+          ? { provider: { order: this.options.order } }
+          : this.options.only
+            ? { provider: { only: this.options.only } }
+            : {}),
       }),
     });
 

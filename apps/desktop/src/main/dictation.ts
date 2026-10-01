@@ -7,24 +7,43 @@ export const SAMPLE_RATE = 16000;
 const MIN_HOLD_MS = 250; // a shorter press is an accidental tap
 const RESULT_VISIBLE_MS = 1500;
 
-/** Called with every finished recording; returns the short message the pill shows. */
-export type ClipHandler = (clip: AudioClip, mode: Mode) => Promise<string>;
+/**
+ * One dictation in flight. The engine opens an STT stream the moment the key goes down, so audio is
+ * recognised while the user speaks and only the tail is left to finalise on release.
+ */
+export interface DictationRun {
+  /** Feed a chunk of 16 kHz mono PCM. */
+  push(samples: Int16Array): void;
+  /** Finalise: `clip` is the whole recording, kept for history audio. Returns the pill message. */
+  finish(clip: AudioClip): Promise<string>;
+  /** Discard without typing anything. */
+  cancel(): void;
+}
 
-/** Turns hotkey events into pill states and a recorded clip. */
+export interface DictationEngine {
+  /** Open a session for one dictation. Called on key-press. */
+  open(mode: Mode): Promise<DictationRun>;
+}
+
+/** Turns hotkey events into pill states, streaming audio to the engine as the user speaks. */
 export class DictationController {
   private readonly pill: PillWindow;
   private readonly mic: MicSource;
-  private readonly onClip: ClipHandler;
+  private readonly engine: DictationEngine;
   private state: "idle" | "listening" | "processing" = "idle";
   private mode: Mode = "exact";
   private pressedAt = 0;
   private chunks: Int16Array[] = [];
+  /** Audio captured before the STT stream finished opening; flushed once it is ready. */
+  private pending: Int16Array[] = [];
+  private run: DictationRun | null = null;
+  private opening: Promise<void> = Promise.resolve();
   private resetTimer: NodeJS.Timeout | undefined;
 
-  constructor(pill: PillWindow, mic: MicSource, onClip: ClipHandler) {
+  constructor(pill: PillWindow, mic: MicSource, engine: DictationEngine) {
     this.pill = pill;
     this.mic = mic;
-    this.onClip = onClip;
+    this.engine = engine;
   }
 
   handleHotkey(event: HotkeyEvent): void {
@@ -39,17 +58,37 @@ export class DictationController {
     this.mode = mode;
     this.pressedAt = Date.now();
     this.chunks = [];
+    this.pending = [];
+    this.run = null;
     this.pill.moveToCursorScreen();
     this.pill.setState({ kind: "listening" });
+
+    // Open the STT stream and the mic together, so neither waits on the other. Chunks that arrive
+    // before the stream is ready are held in `pending` and flushed the moment it opens.
+    this.opening = this.engine
+      .open(mode)
+      .then((run) => {
+        if (this.state === "idle") {
+          run.cancel(); // cancelled during the ~200 ms open
+          return;
+        }
+        this.run = run;
+        for (const chunk of this.pending) run.push(chunk);
+        this.pending = [];
+      })
+      .catch((error: unknown) => this.failOpen(error));
+
     this.mic
       .start((samples) => {
         this.chunks.push(samples);
         this.pill.level(rms(samples));
+        if (this.run) this.run.push(samples);
+        else this.pending.push(samples);
       })
       .catch((error: unknown) => {
         if (this.state !== "listening") return;
         this.chunks = [];
-        this.showResult({ kind: "error", message: error instanceof Error ? error.message : String(error) });
+        this.showResult({ kind: "error", message: message(error) });
       });
   }
 
@@ -61,13 +100,18 @@ export class DictationController {
     this.state = "processing";
     this.pill.setState({ kind: "processing" });
     await this.mic.stop();
+    await this.opening; // make sure the stream finished opening (or failed)
 
     const clip: AudioClip = { samples: concat(this.chunks), sampleRate: SAMPLE_RATE };
     this.chunks = [];
+    const run = this.run;
+    this.run = null;
+    if (!run) return; // open failed; failOpen already showed the error
+
     try {
-      this.showResult({ kind: "done", message: await this.onClip(clip, this.mode) });
+      this.showResult({ kind: "done", message: await run.finish(clip) });
     } catch (error) {
-      this.showResult({ kind: "error", message: error instanceof Error ? error.message : String(error) });
+      this.showResult({ kind: "error", message: message(error) });
     }
   }
 
@@ -75,7 +119,19 @@ export class DictationController {
     this.state = "idle";
     this.pill.setState({ kind: "idle" });
     await this.mic.stop();
+    await this.opening;
+    this.run?.cancel();
+    this.run = null;
     this.chunks = [];
+    this.pending = [];
+  }
+
+  private failOpen(error: unknown): void {
+    if (this.state === "idle") return;
+    this.run = null;
+    this.pending = [];
+    void this.mic.stop();
+    this.showResult({ kind: "error", message: message(error) });
   }
 
   /** Shows the result briefly; a new dictation can start right away. */
@@ -84,6 +140,10 @@ export class DictationController {
     this.pill.setState(state);
     this.resetTimer = setTimeout(() => this.pill.setState({ kind: "idle" }), RESULT_VISIBLE_MS);
   }
+}
+
+function message(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function rms(samples: Int16Array): number {

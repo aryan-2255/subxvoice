@@ -65,7 +65,7 @@ describe.skipIf(!sonioxKey)("Soniox (live)", () => {
 
 describe.skipIf(!openRouterKey)("OpenRouter (live)", () => {
   it("transliterates Devanagari without translating it", async () => {
-    const llm = createLlm({ id: "openrouter", token: openRouterKey, only: ["groq"] });
+    const llm = createLlm({ id: "openrouter", token: openRouterKey, order: ["cerebras", "groq"] });
     const { transliteratePrompt } = await import("@subx/core");
 
     const started = Date.now();

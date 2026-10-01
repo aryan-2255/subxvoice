@@ -51,7 +51,8 @@ export function createEngines(): Engines {
         id: "openrouter",
         token: llmToken,
         model: process.env.OPENROUTER_MODEL,
-        only: ["groq"], // lowest latency for the models we benchmarked
+        // Cerebras is fastest + most consistent on Hindi-English; groq as fallback.
+        order: ["cerebras", "groq"],
       });
     } catch (error) {
       problems.push(describe("Rewriting", error));

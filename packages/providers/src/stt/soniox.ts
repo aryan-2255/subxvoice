@@ -20,7 +20,15 @@ export interface SonioxOptions {
   token: string;
   model?: string;
   baseUrl?: string;
+  /**
+   * Languages to bias recognition toward. These are hints, not a restriction, so other languages
+   * still transcribe and mid-sentence switching still works — they just measurably sharpen the
+   * ones you actually speak. Defaults to Hindi + English, the common code-mixed case.
+   */
+  languageHints?: string[];
 }
+
+const DEFAULT_LANGUAGE_HINTS = ["hi", "en"];
 
 interface SonioxToken {
   text: string;
@@ -38,9 +46,6 @@ interface SonioxMessage {
 /**
  * Soniox real-time speech-to-text. Streams while the user talks, so when the hotkey comes up only
  * the last few hundred milliseconds are still outstanding.
- *
- * Language hints are deliberately not sent: Soniox auto-detects and switches mid-sentence, which is
- * exactly what we need, and pinning a language makes code-switching worse.
  */
 export class SonioxStt implements SttProvider {
   readonly id = "soniox";
@@ -104,8 +109,11 @@ class SonioxStream implements SttStream {
           num_channels: 1,
           // The hotkey is our endpoint, so Soniox must not decide when we stopped talking.
           enable_endpoint_detection: false,
+          // A per-dictation hint wins; otherwise the provider's configured languages.
+          language_hints: options.languageHint
+            ? [options.languageHint]
+            : (connection.languageHints ?? DEFAULT_LANGUAGE_HINTS),
           ...(options.vocabulary.length > 0 ? { context: { terms: options.vocabulary } } : {}),
-          ...(options.languageHint ? { language_hints: [options.languageHint] } : {}),
         }),
       );
       this.opened = true;
