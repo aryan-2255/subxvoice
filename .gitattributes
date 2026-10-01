@@ -1,0 +1,5 @@
+# Same line endings on every OS (Windows git would otherwise check out CRLF and fail the formatter).
+* text=auto eol=lf
+*.ico binary
+*.png binary
+*.icns binary
