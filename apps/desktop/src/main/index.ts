@@ -1,21 +1,39 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { type DictionaryEntry, type PermissionKind, type SessionRecord, SubxError } from "@subx/core";
+import {
+  type DictionaryEntry,
+  type HotkeyBinding,
+  type PermissionKind,
+  Pipeline,
+  type SessionRecord,
+  SubxError,
+} from "@subx/core";
 import { app, BrowserWindow, ipcMain, shell, type Tray } from "electron";
-import { type AppInfo, IPC, type PermissionStatus } from "../shared/ipc";
+import {
+  type AppInfo,
+  type AppSettings,
+  IPC,
+  type MicrophoneOption,
+  type PermissionStatus,
+} from "../shared/ipc";
 import { DictationController } from "./dictation";
 import { nativeMic, PillMic } from "./mic";
 import { PillWindow } from "./pill";
 import { createPlatform } from "./platform";
+import { createEngines, loadDevEnv } from "./providers";
 import { deleteRecording, recordingsDir, saveRecording } from "./recordings";
 import { loadPage, PRELOAD_PATH } from "./renderer";
-import { JsonDictionaryStore, JsonHistoryStore } from "./stores";
+import { JsonDictionaryStore, JsonHistoryStore, JsonSettingsStore } from "./stores";
 import { createTray } from "./tray";
 
 const HOTKEY_RETRY_MS = 3000;
 
+loadDevEnv();
 const platform = createPlatform();
+const engines = createEngines();
+/** Reported by the renderer, which is the only side with MediaDevices. */
+let microphones: MicrophoneOption[] = [];
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null; // kept in a variable so it isn't garbage-collected
 
@@ -69,15 +87,47 @@ function assertDictionaryEntry(value: unknown): DictionaryEntry {
   };
 }
 
+/** Settings arrive from the renderer, so every field is checked before it is stored. */
+function assertSettings(value: unknown, supportedKeys: string[]): Partial<AppSettings> {
+  const input = (value ?? {}) as Partial<AppSettings>;
+  const patch: Partial<AppSettings> = {};
+  if (typeof input.hotkey === "string") {
+    if (!supportedKeys.includes(input.hotkey)) throw new Error(`Unsupported hotkey: ${input.hotkey}`);
+    patch.hotkey = input.hotkey;
+  }
+  if (input.script === "native" || input.script === "roman") patch.script = input.script;
+  if (typeof input.microphoneId === "string" && input.microphoneId.length <= 200) {
+    patch.microphoneId = input.microphoneId;
+  }
+  return patch;
+}
+
 async function start(): Promise<void> {
   const dataDir = app.getPath("userData");
   await mkdir(dataDir, { recursive: true });
   const history = new JsonHistoryStore(join(dataDir, "history.json"));
   const dictionary = new JsonDictionaryStore(join(dataDir, "dictionary.json"));
+  const settings = new JsonSettingsStore<AppSettings>(join(dataDir, "settings.json"), {
+    hotkey: platform.hotkey.defaultBindings()[0]?.keys ?? "",
+    script: "native",
+    microphoneId: "",
+  });
+
+  const bindings = async (): Promise<HotkeyBinding[]> => {
+    const { hotkey } = await settings.all();
+    const supported = platform.hotkey.supportedKeys();
+    if (!hotkey || !supported.includes(hotkey)) return platform.hotkey.defaultBindings();
+    return [{ keys: hotkey, mode: "exact" }];
+  };
 
   ipcMain.handle(
     IPC.appInfo,
-    (): AppInfo => ({ version: app.getVersion(), hotkeys: platform.hotkey.defaultBindings() }),
+    async (): Promise<AppInfo> => ({
+      version: app.getVersion(),
+      hotkeys: await bindings(),
+      supportedKeys: platform.hotkey.supportedKeys(),
+      providers: { stt: !!engines.stt, llm: !!engines.llm },
+    }),
   );
   ipcMain.handle(IPC.openRecordingsFolder, async () => {
     await mkdir(recordingsDir(), { recursive: true });
@@ -121,24 +171,72 @@ async function start(): Promise<void> {
   // Native mic when the OS plug has one (Mac: Swift helper); otherwise Web Audio in the pill.
   const pillMic = new PillMic(pill);
   const mic = platform.microphone ? nativeMic(platform.microphone) : pillMic;
+  const pipeline = engines.stt
+    ? new Pipeline({
+        stt: engines.stt,
+        llm: engines.llm,
+        inserter: platform.inserter,
+        history,
+        dictionary,
+      })
+    : null;
+
   const dictation = new DictationController(pill, mic, async (clip, mode) => {
-    // Speech-to-text is not connected yet, so every recording is saved to history without text.
-    const audioPath = await saveRecording(clip);
     const audioMs = Math.round((clip.samples.length / clip.sampleRate) * 1000);
-    const record: SessionRecord = {
-      id: randomUUID(),
-      createdAt: Date.now(),
-      mode,
-      context: await platform.context.current().catch(() => ({})),
-      rawText: "",
-      finalText: "",
-      audioPath,
-      audioMs,
-      timings: { sttMs: 0, rulesMs: 0, llmMs: 0, insertMs: 0, totalMs: 0 },
+    const keepAudio = async (id: string) => {
+      // After the text is already at the cursor, so disk I/O never delays the paste.
+      await history.attachAudio(id, await saveRecording(clip), audioMs);
+      notifyHistoryChanged();
     };
-    await history.save(record);
+
+    if (!pipeline) {
+      const record: SessionRecord = {
+        id: randomUUID(),
+        createdAt: Date.now(),
+        mode,
+        context: {},
+        rawText: "",
+        finalText: "",
+        audioMs,
+        timings: { sttMs: 0, rulesMs: 0, llmMs: 0, insertMs: 0, totalMs: 0 },
+      };
+      await history.save(record);
+      await keepAudio(record.id);
+      return engines.problems[0] ?? "Speech-to-text is not configured";
+    }
+
+    const { script } = await settings.all();
+    const context = await platform.context.current().catch(() => ({}));
+    const outcome = await pipeline.process(clip, mode, context, {
+      script,
+      // Show the words as heard while the model is still cleaning them up.
+      onTranscript: (text) => pill.setState({ kind: "processing", message: text }),
+    });
+
+    if (outcome.kind === "empty") return "Nothing heard";
+    if (outcome.kind === "command") return `Command: ${outcome.command}`;
     notifyHistoryChanged();
-    return `Saved ${(audioMs / 1000).toFixed(1)}s`;
+    void keepAudio(outcome.record.id);
+    return outcome.record.finalText;
+  });
+
+  ipcMain.handle(IPC.settingsGet, () => settings.all());
+  ipcMain.handle(IPC.settingsSet, async (_event, patch: unknown) => {
+    const next = await settings.update(assertSettings(patch, platform.hotkey.supportedKeys()));
+    for (const window of BrowserWindow.getAllWindows()) {
+      window.webContents.send(IPC.settingsChanged, next);
+    }
+    await registerHotkey();
+    return next;
+  });
+  ipcMain.handle(IPC.microphoneList, () => microphones);
+  ipcMain.on(IPC.microphonePublish, (_event, options: unknown) => {
+    microphones = Array.isArray(options)
+      ? options
+          .filter((item): item is MicrophoneOption => !!item && typeof item.id === "string")
+          .map((item) => ({ id: String(item.id), label: String(item.label ?? "Microphone") }))
+          .slice(0, 50)
+      : [];
   });
 
   ipcMain.on(IPC.pillHover, (event, inside: unknown) => {
@@ -157,9 +255,9 @@ async function start(): Promise<void> {
     if (pill.owns(event.sender)) pillMic.failed(String(message));
   });
 
-  const registerHotkey = () =>
+  const registerHotkey = async () =>
     platform.hotkey
-      .register(platform.hotkey.defaultBindings(), (event) => dictation.handleHotkey(event))
+      .register(await bindings(), (event) => dictation.handleHotkey(event))
       .catch((error: unknown) => {
         // Missing permission: keep trying, so the hotkey starts working as soon as it is granted.
         if (error instanceof SubxError && error.code === "permission_denied") {

@@ -22,7 +22,7 @@ export function App() {
           {page === "home" && <HomePage hotkey={hotkey} onNavigate={setPage} />}
           {page === "history" && <HistoryPage hotkey={hotkey} />}
           {page === "dictionary" && <DictionaryPage />}
-          {page === "settings" && <SettingsPage hotkey={hotkey} version={info?.version ?? ""} />}
+          {page === "settings" && <SettingsPage info={info} />}
         </div>
       </main>
     </div>

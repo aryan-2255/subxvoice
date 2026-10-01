@@ -54,7 +54,12 @@ export const HOTKEY_LABELS: Record<string, string> = {
   right_option: "right ⌥ Option",
   right_command: "right ⌘ Command",
   right_ctrl: "right Ctrl",
+  left_option: "left ⌥ Option",
+  left_ctrl: "left Ctrl",
   "ctrl+win": "Ctrl + Win",
+  "ctrl+alt": "Ctrl + Alt",
+  "alt+win": "Alt + Win",
+  "ctrl+shift+alt": "Ctrl + Shift + Alt",
 };
 
 export const hotkeyLabel = (keys: string | undefined) => (keys && HOTKEY_LABELS[keys]) ?? "the hotkey";

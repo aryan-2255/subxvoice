@@ -14,6 +14,11 @@ export interface HotkeyBinding {
 export interface Hotkey {
   /** This OS's default hold-to-talk keys, used until the user picks their own. */
   defaultBindings(): HotkeyBinding[];
+  /**
+   * Every `keys` value this OS can watch, so Settings can offer the same picker on both. The
+   * vocabulary differs per OS — "fn" on Mac, "ctrl+win" on Windows — but the UI does not.
+   */
+  supportedKeys(): string[];
   register(bindings: HotkeyBinding[], onEvent: (event: HotkeyEvent) => void): Promise<void>;
   unregisterAll(): Promise<void>;
 }

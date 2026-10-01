@@ -3,11 +3,16 @@ productName: SUBXVoice
 directories:
   buildResources: build
   output: dist
-# Main, preload and renderer are fully bundled into out/, so no node_modules are shipped.
-# (Native Node modules, if ever added, must go in "dependencies" instead.)
+# Main, preload and renderer are fully bundled into out/, so no node_modules are shipped —
+# except native modules, which cannot be bundled and live in "dependencies".
 files:
   - out/**
   - package.json
+  - node_modules/koffi/**
+
+# A .node binary cannot be loaded from inside the asar archive.
+asarUnpack:
+  - node_modules/koffi/**
 
 mac:
   # The Swift helper (hotkey, microphone, permissions). Built by scripts/build-mac-helper.mjs.

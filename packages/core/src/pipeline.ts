@@ -3,10 +3,10 @@ import type { TextInserter } from "./contracts/platform";
 import type { DictionaryStore, HistoryStore } from "./contracts/store";
 import type { SttProvider } from "./contracts/stt";
 import { SubxError } from "./errors";
-import { styleRewritePrompt } from "./prompts";
+import { needsTransliteration, styleRewritePrompt, transliteratePrompt } from "./prompts";
 import { Router } from "./router";
 import { applyRules } from "./rules";
-import type { AppContext, AudioClip, Mode, SessionRecord } from "./types";
+import type { AppContext, AudioClip, Mode, ScriptPreference, SessionRecord } from "./types";
 
 export interface PipelineDeps {
   stt: SttProvider;
@@ -23,6 +23,13 @@ export type Outcome =
   | { kind: "command"; command: string; rest: string; context: AppContext }
   | { kind: "empty" };
 
+export interface ProcessOptions {
+  /** Read from settings on every dictation, so changing it takes effect immediately. */
+  script?: ScriptPreference;
+  /** Shown while the LLM is still working, so the pill can display the raw words first. */
+  onTranscript?: (text: string) => void;
+}
+
 /** Audio in → text at the cursor. Talks only to plug-point interfaces, never to a vendor or OS. */
 export class Pipeline {
   private readonly deps: PipelineDeps;
@@ -33,8 +40,14 @@ export class Pipeline {
     this.router = deps.router ?? new Router();
   }
 
-  async process(audio: AudioClip, mode: Mode, context: AppContext): Promise<Outcome> {
+  async process(
+    audio: AudioClip,
+    mode: Mode,
+    context: AppContext,
+    options: ProcessOptions = {},
+  ): Promise<Outcome> {
     const clock = stopwatch();
+    const script = options.script ?? "native";
 
     const dictionary = await this.deps.dictionary.all();
     const transcript = await this.deps.stt.transcribe(audio, {
@@ -45,13 +58,18 @@ export class Pipeline {
     const text = applyRules(transcript.text, dictionary);
     const rulesMs = clock.lap();
     if (!text) return { kind: "empty" };
+    options.onTranscript?.(text);
 
     const route = this.router.route(text, mode);
     if (route.kind === "command") {
       return { kind: "command", command: route.command, rest: route.rest, context };
     }
 
-    const finalText = route.mode === "style" ? await this.rewrite(text, context) : text;
+    // At most one LLM call: style mode folds the script rule into its own prompt.
+    const finalText =
+      route.mode === "style"
+        ? await this.rewrite(text, context, script)
+        : await this.transliterate(text, script);
     const llmMs = clock.lap();
 
     await this.deps.inserter.insert(finalText);
@@ -70,13 +88,30 @@ export class Pipeline {
     return { kind: "inserted", record };
   }
 
-  private async rewrite(text: string, context: AppContext): Promise<string> {
+  private async rewrite(text: string, context: AppContext, script: ScriptPreference): Promise<string> {
     if (!this.deps.llm) throw new SubxError("unsupported", "Style mode needs an LLM provider");
     const response = await this.deps.llm.complete({
-      system: styleRewritePrompt(context),
+      system: styleRewritePrompt(context, script),
       messages: [{ role: "user", content: text }],
     });
     return response.text.trim();
+  }
+
+  /**
+   * Exact mode with a Roman script preference. The user's own words are never lost: if the model
+   * is missing or fails, the text goes in as it was heard.
+   */
+  private async transliterate(text: string, script: ScriptPreference): Promise<string> {
+    if (!this.deps.llm || !needsTransliteration(text, script)) return text;
+    try {
+      const response = await this.deps.llm.complete({
+        system: transliteratePrompt(),
+        messages: [{ role: "user", content: text }],
+      });
+      return response.text.trim() || text;
+    } catch {
+      return text;
+    }
   }
 }
 

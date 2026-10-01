@@ -60,6 +60,16 @@ export class JsonHistoryStore implements HistoryStore {
     await this.file.write(this.records);
   }
 
+  /** The pipeline writes the record; the app saves the audio afterwards, off the critical path. */
+  async attachAudio(id: string, audioPath: string, audioMs: number): Promise<void> {
+    const records = await this.load();
+    const record = records.find((item) => item.id === id);
+    if (!record) return;
+    record.audioPath = audioPath;
+    record.audioMs = audioMs;
+    await this.file.write(records);
+  }
+
   private async load(): Promise<SessionRecord[]> {
     this.records ??= await this.file.read();
     return this.records;
@@ -95,5 +105,29 @@ export class JsonDictionaryStore implements DictionaryStore {
   private async load(): Promise<DictionaryEntry[]> {
     this.entries ??= await this.file.read();
     return this.entries;
+  }
+}
+
+export class JsonSettingsStore<T extends object> {
+  private readonly file: JsonFile<Partial<T>>;
+  private readonly defaults: T;
+  private current: T | null = null;
+
+  constructor(path: string, defaults: T) {
+    this.file = new JsonFile(path, {});
+    this.defaults = defaults;
+  }
+
+  async all(): Promise<T> {
+    // Unknown keys from an older build are dropped; missing ones fall back to the default.
+    this.current ??= { ...this.defaults, ...(await this.file.read()) };
+    return this.current;
+  }
+
+  async update(patch: Partial<T>): Promise<T> {
+    const next = { ...(await this.all()), ...patch };
+    this.current = next;
+    await this.file.write(next);
+    return next;
   }
 }

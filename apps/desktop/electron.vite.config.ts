@@ -7,7 +7,14 @@ import { defineConfig } from "electron-vite";
 const uiPlatform = process.platform === "win32" ? "win" : "mac";
 
 export default defineConfig({
-  main: {},
+  main: {
+    build: {
+      rollupOptions: {
+        // koffi is a native module: it has to stay a real require() at runtime.
+        external: ["koffi"],
+      },
+    },
+  },
   preload: {},
   renderer: {
     plugins: [react(), tailwindcss()],

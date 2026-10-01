@@ -11,7 +11,7 @@ const silence = () => Array<number>(BAR_COUNT).fill(0);
 const SHAPE: Record<PillState["kind"], string> = {
   idle: "h-7 px-2.5",
   listening: "h-8 w-32",
-  processing: "h-8 w-20",
+  processing: "h-8 px-4",
   done: "h-8 px-4",
   error: "h-8 px-4",
 };
@@ -69,7 +69,13 @@ export function Pill() {
           </>
         )}
         {state.kind === "listening" && <Waveform levels={levels} />}
-        {state.kind === "processing" && <Dots />}
+        {state.kind === "processing" &&
+          (state.message ? (
+            // The words as heard, so there is something to read while the model works.
+            <span className="truncate text-xs text-white/70 italic">{state.message}</span>
+          ) : (
+            <Dots />
+          ))}
         {state.kind === "done" && <span className="truncate text-xs text-white/90">{state.message}</span>}
         {state.kind === "error" && <span className="truncate text-xs text-red-300">{state.message}</span>}
       </button>

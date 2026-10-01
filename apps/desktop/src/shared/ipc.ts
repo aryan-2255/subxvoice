@@ -5,6 +5,7 @@ import type {
   HotkeyBinding,
   PermissionKind,
   PermissionState,
+  ScriptPreference,
   SessionRecord,
 } from "@subx/core";
 
@@ -21,6 +22,11 @@ export const IPC = {
   dictionaryList: "dictionary:list",
   dictionaryUpsert: "dictionary:upsert",
   dictionaryRemove: "dictionary:remove",
+  settingsGet: "settings:get",
+  settingsSet: "settings:set",
+  settingsChanged: "settings:changed",
+  microphoneList: "settings:microphones",
+  microphonePublish: "settings:microphones-publish",
   // main → pill
   pillState: "pill:state",
   pillLevel: "pill:level",
@@ -36,6 +42,24 @@ export const IPC = {
 export interface AppInfo {
   version: string;
   hotkeys: HotkeyBinding[];
+  /** Every hotkey this OS can watch, for the Settings picker. */
+  supportedKeys: string[];
+  /** Which engines are configured. Settings shows a warning when one is missing. */
+  providers: { stt: boolean; llm: boolean };
+}
+
+/** User settings. Identical on both OSes; only the allowed hotkey values differ. */
+export interface AppSettings {
+  /** One of `AppInfo.supportedKeys`. */
+  hotkey: string;
+  script: ScriptPreference;
+  /** MediaDevices id, or "" for the system default. */
+  microphoneId: string;
+}
+
+export interface MicrophoneOption {
+  id: string;
+  label: string;
 }
 
 export interface PermissionStatus {
@@ -46,7 +70,8 @@ export interface PermissionStatus {
 export type PillState =
   | { kind: "idle" }
   | { kind: "listening" }
-  | { kind: "processing" }
+  /** `message` carries the raw transcript while the LLM is still cleaning it up. */
+  | { kind: "processing"; message?: string }
   | { kind: "done"; message: string }
   | { kind: "error"; message: string };
 
@@ -75,6 +100,14 @@ export interface SubxApi {
     list(): Promise<DictionaryEntry[]>;
     upsert(entry: DictionaryEntry): Promise<void>;
     remove(word: string): Promise<void>;
+  };
+  settings: {
+    get(): Promise<AppSettings>;
+    set(settings: Partial<AppSettings>): Promise<AppSettings>;
+    onChanged(listener: (settings: AppSettings) => void): () => void;
+    /** Microphones the user can pick from; read in the renderer, where MediaDevices lives. */
+    publishMicrophones(options: MicrophoneOption[]): void;
+    microphones(): Promise<MicrophoneOption[]>;
   };
   /** Used only by the recording pill window. The mic commands are for the Web Audio fallback. */
   pill: {

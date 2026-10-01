@@ -16,6 +16,7 @@
     "@subx/core": "workspace:*",
     "@subx/platform-mac": "workspace:*",
     "@subx/platform-win": "workspace:*",
+    "@subx/providers": "workspace:*",
     "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^26.6.3",
     "@types/react": "^19.3.0",
@@ -29,5 +30,8 @@
     "tailwindcss": "^4.3.3",
     "typescript": "^5.9.3",
     "vite": "^7.3.6"
+  },
+  "dependencies": {
+    "koffi": "^3.3.2"
   }
 }

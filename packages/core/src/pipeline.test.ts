@@ -58,4 +58,70 @@ describe("Pipeline", () => {
     expect(await pipeline.process(audio, "exact", {})).toEqual({ kind: "empty" });
     expect(inserter.inserted).toEqual([]);
   });
+
+  it("reports the raw transcript before the model has rewritten it", async () => {
+    const llm = new FakeLlm("main theek hoon");
+    const { pipeline } = setup("मैं ठीक हूँ", llm);
+    const seen: string[] = [];
+
+    await pipeline.process(audio, "exact", {}, { script: "roman", onTranscript: (t) => seen.push(t) });
+
+    expect(seen).toEqual(["मैं ठीक हूँ"]);
+  });
+
+  describe("Roman script preference", () => {
+    it("transliterates non-Latin speech in exact mode", async () => {
+      const llm = new FakeLlm("main theek hoon");
+      const { pipeline, inserter } = setup("मैं ठीक हूँ", llm);
+
+      await pipeline.process(audio, "exact", {}, { script: "roman" });
+
+      expect(inserter.inserted).toEqual(["main theek hoon"]);
+      expect(llm.requests[0]?.system).toMatch(/transliteration/i);
+    });
+
+    it("leaves the script alone by default", async () => {
+      const llm = new FakeLlm("main theek hoon");
+      const { pipeline, inserter } = setup("मैं ठीक हूँ", llm);
+
+      await pipeline.process(audio, "exact", {});
+
+      expect(inserter.inserted).toEqual(["मैं ठीक हूँ"]);
+      expect(llm.requests).toEqual([]);
+    });
+
+    it("costs nothing when the speech was already in Latin letters", async () => {
+      const llm = new FakeLlm("should not be called");
+      const { pipeline, inserter } = setup("hello there", llm);
+
+      await pipeline.process(audio, "exact", {}, { script: "roman" });
+
+      expect(inserter.inserted).toEqual(["hello there"]);
+      expect(llm.requests).toEqual([]);
+    });
+
+    // The user's words are the one thing we must never lose.
+    it("inserts the original when the model fails", async () => {
+      const llm = new FakeLlm("");
+      llm.complete = async () => {
+        throw new Error("provider down");
+      };
+      const { pipeline, inserter } = setup("मैं ठीक हूँ", llm);
+
+      await pipeline.process(audio, "exact", {}, { script: "roman" });
+
+      expect(inserter.inserted).toEqual(["मैं ठीक हूँ"]);
+    });
+
+    it("style mode folds the script into its single call", async () => {
+      const llm = new FakeLlm("Main theek hoon.");
+      const { pipeline, inserter } = setup("मैं ठीक हूँ", llm);
+
+      await pipeline.process(audio, "style", {}, { script: "roman" });
+
+      expect(inserter.inserted).toEqual(["Main theek hoon."]);
+      expect(llm.requests).toHaveLength(1);
+      expect(llm.requests[0]?.system).toMatch(/Latin letters/);
+    });
+  });
 });

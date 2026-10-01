@@ -29,6 +29,13 @@ const api: SubxApi = {
     upsert: (entry) => ipcRenderer.invoke(IPC.dictionaryUpsert, entry),
     remove: (word) => ipcRenderer.invoke(IPC.dictionaryRemove, word),
   },
+  settings: {
+    get: () => ipcRenderer.invoke(IPC.settingsGet),
+    set: (settings) => ipcRenderer.invoke(IPC.settingsSet, settings),
+    onChanged: (listener) => subscribe(IPC.settingsChanged, listener),
+    publishMicrophones: (options) => ipcRenderer.send(IPC.microphonePublish, options),
+    microphones: () => ipcRenderer.invoke(IPC.microphoneList),
+  },
   pill: {
     onState: (listener) => subscribe(IPC.pillState, listener),
     onLevel: (listener) => subscribe(IPC.pillLevel, listener),
