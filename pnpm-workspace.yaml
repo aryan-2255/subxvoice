@@ -1,0 +1,11 @@
+packages:
+  - apps/*
+  - packages/*
+
+# pnpm only runs install scripts for packages listed here.
+allowBuilds:
+  electron: true
+  electron-winstaller: false
+  esbuild: true
+  sharp: false
+  unrs-resolver: false

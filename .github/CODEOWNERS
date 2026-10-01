@@ -1,0 +1,10 @@
+# Reviewers are requested automatically for changes in these paths.
+# TODO: replace FRIEND_GITHUB_USERNAME with the Windows owner's GitHub username.
+
+*                                      @aryan-2255 @FRIEND_GITHUB_USERNAME
+
+packages/platform-mac/                 @aryan-2255
+apps/desktop/src/renderer/src/platform/mac/  @aryan-2255
+
+packages/platform-win/                 @FRIEND_GITHUB_USERNAME
+apps/desktop/src/renderer/src/platform/win/  @FRIEND_GITHUB_USERNAME

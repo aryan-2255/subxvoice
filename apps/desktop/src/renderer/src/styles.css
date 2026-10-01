@@ -1,0 +1,71 @@
+@import "tailwindcss";
+
+/* Design tokens. Cobalt is reserved for voice: waveforms, play buttons, the voice strip. */
+:root {
+  --canvas: #ffffff;
+  --sidebar: #f2f3f5;
+  --ink: #1d1f23;
+  --muted: #6e737b;
+  --line: #e3e5e8;
+  --accent: #3346d3;
+  --accent-soft: #e8ebfc;
+  --danger: #c8322f;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --canvas: #1e1f22;
+    --sidebar: #26272b;
+    --ink: #ecedef;
+    --muted: #9a9ea6;
+    --line: #34363b;
+    --accent: #7d8bff;
+    --accent-soft: #2a2f52;
+    --danger: #ff6b66;
+  }
+}
+
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-sidebar: var(--sidebar);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-danger: var(--danger);
+  /* system-ui = SF Pro on Mac, Segoe UI on Windows — native feel on both. */
+  --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+  cursor: default;
+  user-select: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    /* biome-ignore lint/complexity/noImportantStyles: reduced motion must override every animation */
+    transition: none !important;
+    /* biome-ignore lint/complexity/noImportantStyles: reduced motion must override every animation */
+    animation: none !important;
+  }
+}

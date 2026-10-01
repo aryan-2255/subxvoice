@@ -1,0 +1,33 @@
+{
+  "name": "@subx/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SUBXVoice desktop app",
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev": "node scripts/build-mac-helper.mjs && electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "dist:mac": "node scripts/build-mac-helper.mjs --universal && electron-vite build && electron-builder --mac",
+    "dist:win": "electron-vite build && electron-builder --win"
+  },
+  "devDependencies": {
+    "@subx/core": "workspace:*",
+    "@subx/platform-mac": "workspace:*",
+    "@subx/platform-win": "workspace:*",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "^26.6.3",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^5.2.0",
+    "electron": "^44.4.5",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^5.0.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.6"
+  }
+}

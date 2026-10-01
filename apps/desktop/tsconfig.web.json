@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "types": ["vite/client"],
+    "paths": {
+      // Type-checks against the Mac UI; both platform folders are still checked because
+      // they sit under src/renderer. The real alias is set per OS in electron.vite.config.ts.
+      "@platform/*": ["./src/renderer/src/platform/mac/*"]
+    }
+  },
+  "include": ["src/renderer", "src/shared"]
+}

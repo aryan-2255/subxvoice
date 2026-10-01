@@ -1,0 +1,22 @@
+{
+  "name": "@subx/platform-win",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@subx/core": "workspace:*"
+  },
+  "peerDependencies": {
+    "electron": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.0",
+    "electron": "^44.4.5"
+  }
+}
