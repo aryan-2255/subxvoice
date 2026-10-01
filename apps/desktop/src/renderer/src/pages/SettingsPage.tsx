@@ -66,16 +66,19 @@ export function SettingsPage({ info }: { info: AppInfo | null }) {
       </Row>
 
       <Row title="Microphone">
-        <Choice
-          name="microphone"
-          value={settings?.microphoneId ?? ""}
-          onChange={(value) => update({ microphoneId: value })}
-          options={[
-            { value: "", label: "System default" },
-            ...microphones.map((option) => ({ value: option.id, label: option.label })),
-          ]}
-          empty="No microphone found. Allow microphone access, then reopen this page."
-        />
+        {/* With a native mic (Mac) the system input device is used, so the picker would do nothing. */}
+        {info && !info.nativeMicrophone && (
+          <Choice
+            name="microphone"
+            value={settings?.microphoneId ?? ""}
+            onChange={(value) => update({ microphoneId: value })}
+            options={[
+              { value: "", label: "System default" },
+              ...microphones.map((option) => ({ value: option.id, label: option.label })),
+            ]}
+            empty="No microphone found. Allow microphone access, then reopen this page."
+          />
+        )}
         <MicrophoneNote />
       </Row>
 

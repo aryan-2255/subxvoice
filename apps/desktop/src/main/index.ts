@@ -146,6 +146,7 @@ async function start(): Promise<void> {
       hotkeys: await bindings(),
       supportedKeys: platform.hotkey.supportedKeys(),
       providers: { stt: !!engines.stt, llm: !!engines.llm },
+      nativeMicrophone: !!platform.microphone,
     }),
   );
   ipcMain.handle(IPC.openRecordingsFolder, async () => {
@@ -235,6 +236,8 @@ async function start(): Promise<void> {
           if (outcome.kind === "command") return `Command: ${outcome.command}`;
           notifyHistoryChanged();
           void keepAudio(clip, outcome.record.id);
+          // Saved to history either way; the pill shows why the text didn't appear.
+          if (outcome.pasteError) throw new Error(outcome.pasteError);
           return outcome.record.finalText;
         },
         cancel: () => {
@@ -280,17 +283,21 @@ async function start(): Promise<void> {
     if (pill.owns(event.sender)) pillMic.failed(String(message));
   });
 
-  const registerHotkey = async () =>
-    platform.hotkey
+  let hotkeyRetry: NodeJS.Timeout | undefined;
+  const registerHotkey = async (): Promise<void> => {
+    // One retry loop at most, even when a settings change re-registers while a retry is pending.
+    clearTimeout(hotkeyRetry);
+    await platform.hotkey
       .register(await bindings(), (event) => dictation.handleHotkey(event))
       .catch((error: unknown) => {
         // Missing permission: keep trying, so the hotkey starts working as soon as it is granted.
         if (error instanceof SubxError && error.code === "permission_denied") {
-          setTimeout(registerHotkey, HOTKEY_RETRY_MS);
+          hotkeyRetry = setTimeout(registerHotkey, HOTKEY_RETRY_MS);
         } else {
           console.error("Hotkey unavailable:", error);
         }
       });
+  };
   void registerHotkey();
 
   tray = createTray(openMainWindow);

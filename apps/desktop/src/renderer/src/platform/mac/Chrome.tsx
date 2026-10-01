@@ -28,8 +28,8 @@ export function HotkeyNote() {
 export function MicrophoneNote() {
   return (
     <p>
-      The microphone turns on only while you hold the hotkey, and turns off as soon as you let go. It takes
-      about a tenth of a second to start.
+      The microphone turns on only while you hold the hotkey, and turns off as soon as you let go. SUBXVoice
+      uses your Mac's input device — change it in System Settings → Sound → Input.
     </p>
   );
 }

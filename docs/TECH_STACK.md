@@ -14,8 +14,8 @@ One language everywhere: **TypeScript** (Python only for future ML work).
 |---|---|
 | App shell | Electron + electron-vite |
 | Mic capture | Mac: Swift helper (AVAudioEngine), on only while the key is held. Fallback: Web Audio |
-| Hold-to-talk hotkey | Mac: Swift helper event tap, default fn (🌐). Windows: uiohook-napi, default Ctrl + Win (planned) |
-| Paste at cursor | Clipboard + Cmd/Ctrl+V — Mac: posted by the Swift helper; Windows: uiohook-napi `keyTap` (both planned) |
+| Hold-to-talk hotkey | Mac: Swift helper event tap, default fn (🌐). Windows: `GetAsyncKeyState` polling via koffi, default Ctrl + Win |
+| Paste at cursor | Full clipboard snapshot → Cmd/Ctrl+V → restore. Mac: ⌘V from the Swift helper; Windows: `SendInput` via koffi |
 | Active app / title / URL | get-windows (planned) |
 | Reading focused text, edit detection | Native helper — Swift (Mac, `native/mac-helper`), C# (Windows, planned) |
 | Local storage | JSON files + WAV recordings today (`apps/desktop/src/main/stores.ts`); SQLite + Drizzle later |
@@ -59,6 +59,13 @@ forms), Recharts (real charts), wavesurfer.js (waveforms), TanStack Virtual (ver
 | Permissions | Mic, Accessibility, Input Monitoring | Mic |
 | Default hotkey | fn (🌐) | Ctrl + Win |
 | Font | system-ui → SF Pro | system-ui → Segoe UI Variable |
+
+## Speech and language engines
+| Part | Tech |
+|---|---|
+| Speech-to-text | Soniox real-time (`stt-rt-v5`), streamed over a websocket while the user speaks; Hindi + English hints |
+| Rewriting / Roman script | OpenRouter → `openai/gpt-oss-120b`, routed to Cerebras first, Groq as fallback |
+| Keys | `.env` in development (main process only, never packaged); backend tokens in production |
 
 ## Backend
 | Part | Tech |
@@ -136,8 +143,8 @@ Nothing is built for this now. The design just keeps it possible:
 2. ✅ Mac: fn hotkey + native mic (Swift helper), recording pill, tray, dashboard
 3. ✅ Local history (with audio playback) + dictionary
 4. ✅ Website with download buttons
-5. ⏳ Speech-to-text provider + benchmark → paste at the cursor (next, Mac)
-6. ⏳ Windows plugs — in parallel, see [WINDOWS.md](WINDOWS.md)
+5. ✅ Speech-to-text (Soniox, streaming) → paste at the cursor, on Mac and Windows
+6. ✅ Windows hotkey + paste; Roman-script output via OpenRouter; Settings (hotkey, script, mic)
 7. ⏳ Style mode (LLM), voice commands
 8. ⏳ Backend (login, sync, stats), installers, signing, auto-update
 9. ⏳ Teams, MCP

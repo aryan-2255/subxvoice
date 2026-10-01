@@ -13,10 +13,13 @@ export function useHistory(): SessionRecord[] | null {
   return records;
 }
 
+/** Version, current hotkey and engine status. Re-read when settings change (e.g. a new hotkey). */
 export function useAppInfo(): AppInfo | null {
   const [info, setInfo] = useState<AppInfo | null>(null);
   useEffect(() => {
-    void window.subx.app.info().then(setInfo);
+    const load = () => void window.subx.app.info().then(setInfo);
+    load();
+    return window.subx.settings.onChanged(load);
   }, []);
   return info;
 }

@@ -18,7 +18,7 @@ export function createMacPlatform({ helperPath }: MacPlatformOptions): Platform 
     os: "mac",
     hotkey: new MacHotkey(helper),
     microphone: new MacMicrophone(helper),
-    inserter: new MacInserter(),
+    inserter: new MacInserter(helper),
     permissions: new MacPermissions(helper),
     context: new MacContextReader(),
     desktop: new MacDesktopActions(),

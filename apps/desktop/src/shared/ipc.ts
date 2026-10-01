@@ -46,6 +46,11 @@ export interface AppInfo {
   supportedKeys: string[];
   /** Which engines are configured. Settings shows a warning when one is missing. */
   providers: { stt: boolean; llm: boolean };
+  /**
+   * True when the OS plug records natively (Mac). That path uses the system input device, so the
+   * in-app microphone picker only applies when this is false.
+   */
+  nativeMicrophone: boolean;
 }
 
 /** User settings. Identical on both OSes; only the allowed hotkey values differ. */

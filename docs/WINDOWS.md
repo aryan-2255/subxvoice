@@ -60,74 +60,47 @@ hotkey (platform) → mic → 16 kHz audio chunks → [STT → rules → paste] 
 
 ## What works on Windows today
 
-> **The app has never been run on a Windows machine.** CI type-checks, tests and builds it on Windows on
-> every push, but nobody has opened it there yet. Expect small runtime fixes.
-
 | Piece | File | Windows status |
 |---|---|---|
-| Dashboard, pill, tray, history, dictionary | `apps/desktop` (shared) | Should work — untested |
-| Microphone | Web Audio fallback in the pill (`renderer/src/pill/recorder.ts`) | Should work. `Platform.microphone` is not set on Windows, so this fallback is used automatically |
-| Permissions | `platform-win/src/permissions.ts` | Done (microphone only) |
-| Open URL | `platform-win/src/desktop.ts` | Done |
-| Hotkey | `platform-win/src/hotkey.ts` | **Stub — your first real task** |
-| Paste text | `platform-win/src/inserter.ts` | Stub (also not done on Mac yet) |
-| Active app / window | `platform-win/src/context.ts` | Stub |
-| Open app by name | `platform-win/src/desktop.ts` | Stub |
-| Speech-to-text, LLM, backend | shared | Not built yet, for both OSes |
+| Hotkey (hold Ctrl + Win, or another combo from Settings) | `platform-win/src/hotkey.ts` | ✅ Done — polls real key state, see `win32.ts` |
+| Paste text at the cursor | `platform-win/src/inserter.ts` | ✅ Done — Ctrl+V via `SendInput`, clipboard restored |
+| Microphone | Web Audio fallback in the pill (`renderer/src/pill/recorder.ts`) | ✅ Works, with a mic picker in Settings |
+| Speech-to-text + Roman script | shared (`packages/providers`) | ✅ Works with keys in `.env` |
+| Dashboard, pill, tray, history, dictionary, settings | `apps/desktop` (shared) | ✅ |
+| Permissions | `platform-win/src/permissions.ts` | ✅ Microphone only |
+| Open URL | `platform-win/src/desktop.ts` | ✅ |
+| Active app / window | `platform-win/src/context.ts` | ⏳ Stub — next task |
+| Open app by name | `platform-win/src/desktop.ts` | ⏳ Stub |
+| Installer | `pnpm --filter @subx/desktop dist:win` | ⏳ Not tried yet |
 
 ## Your tasks, in order
 
 Do them one per PR. Each one has a "done when" check.
 
-### 0. Run it on Windows
-Run `pnpm dev:desktop` and fix whatever breaks. Check: dashboard opens, the pill shows at the bottom of
-the screen, the tray icon is visible (it's drawn white for dark taskbars in `apps/desktop/src/main/tray.ts`),
-**Quit SUBXVoice** in the tray menu quits.
-**Done when** the app runs and all four dashboard pages open without errors.
+### Done
+- **Hotkey** — polling `GetAsyncKeyState` every 15 ms through koffi instead of a keyboard hook (a slow
+  hook is silently removed by Windows). Hold the combo to talk; any other key cancels.
+- **Paste** — clipboard snapshot (every format, so a copied image survives) → Ctrl+V once the user has let
+  go of every modifier → clipboard restored. Can't paste into apps running as administrator (UIPI).
 
-### 1. Hotkey — hold Ctrl + Win to talk
-File: `packages/platform-win/src/hotkey.ts`. Read `packages/platform-mac/src/hotkey.ts` first — same
-behaviour, different key source.
-
-- Use [`uiohook-napi`](https://www.npmjs.com/package/uiohook-napi) (global keydown/keyup; no permission
-  needed on Windows). Default binding stays `ctrl+win` (`defaultBindings()` already returns it).
-- `pressed` when both Ctrl and Win are down; `released` when either goes up; `cancel` when any other key
-  is pressed while they are held (so the user's own Ctrl+Win shortcuts still work).
-- Keycodes: `UiohookKey.Ctrl`/`CtrlRight` and `UiohookKey.Meta`/`MetaRight`.
-- It is a native module, so: add it to `packages/platform-win` **and** to `apps/desktop` `"dependencies"`
-  (not devDependencies — electron-vite must not bundle it), and add `uiohook-napi: true` under
-  `allowBuilds` in `pnpm-workspace.yaml`.
-- Windows can't send our keys to apps running as administrator (UIPI). Don't retry; that's expected.
-
-**Done when** holding Ctrl+Win shows the waveform in the pill, releasing saves a recording that appears in
-History, and pressing a letter while holding Ctrl+Win cancels instead of recording.
-
-### 2. Microphone
-Nothing to build: the Web Audio fallback is used automatically. It keeps the mic open for a minute after
-each dictation (Chromium needs ~300 ms to open it, which would cut the first word).
-**Done when** History playback (▶) plays your actual voice.
-
-### 3. Paste — `inserter.ts`
-Save the clipboard → write the text → send Ctrl+V (`uIOhook.keyTap(UiohookKey.V, [UiohookKey.Ctrl])`) →
-restore the clipboard after ~150 ms. The Mac version isn't built yet either — agree on the approach with
-Aryan so both behave the same. It only becomes visible once speech-to-text exists.
-
-### 4. Active app — `context.ts`
+### 1. Active app — `context.ts`
 Return `{ appName, windowTitle, url }` for the focused window, e.g. with
-[`get-windows`](https://www.npmjs.com/package/get-windows). Return what you can; every field is optional.
+[`get-windows`](https://www.npmjs.com/package/get-windows) or Win32 calls in `win32.ts`. Every field is
+optional. It is passed to the LLM so the tone matches the app (Slack vs. Gmail) and shown in History.
+**Done when** History shows "in <app name>" under a new dictation.
 
-### 5. Open app by name — `desktop.ts`
+### 2. Open app by name — `desktop.ts`
 `openApp(name)`: find the Start Menu shortcut and `shell.openPath` it.
 
-### 6. Windows look and feel
+### 3. Windows look and feel
 `renderer/src/platform/win/Chrome.tsx` holds the Windows-only UI pieces (sidebar top, permission text,
 hotkey/mic notes). Optional polish: `titleBarOverlay` / Mica in `src/main/index.ts` behind
 `platform.os === "win"`.
 
-### 7. Installer
-`pnpm --filter @subx/desktop dist:win` builds `SUBXVoice-windows-setup.exe` (NSIS). Check that
-`uiohook-napi` ends up inside the installed app. If it doesn't, try `node-linker=hoisted` in a root
-`.npmrc`. Code signing comes later.
+### 4. Installer
+`pnpm --filter @subx/desktop dist:win` builds `SUBXVoice-windows-setup.exe` (NSIS). Check that koffi
+ends up unpacked inside the installed app and the hotkey works from the installed copy. Code signing
+comes later.
 
 ### Later — native helper (only if needed)
 For things Node can't do well (reading the focused text field, detecting the user's edits, a faster mic),
@@ -135,15 +108,23 @@ build `native/win-helper` in C#. Make it speak **the same protocol as the Mac he
 per line over stdin/stdout, see `native/mac-helper/Sources/main.swift` and
 `packages/platform-mac/src/helper.ts` — so the TypeScript side can mirror `platform-mac`.
 
+### Rules learned the hard way
+- `platform-win` is imported on macOS too. Never load `user32.dll` (or call any Windows API) at import
+  time — load it on first use. A top-level `koffi.load` crashed the Mac app on startup.
+- `clipboard.ts` exists in both platform packages and must stay identical.
+- Run `pnpm check` before pushing; CI runs on both OSes and must be green.
+
 ## Environment variables and API keys
 
-- **Nothing needs a `.env` today.** Speech-to-text and LLM providers aren't connected yet.
-- The plan: vendor API keys live **only on our backend** (`apps/api`, not built yet); the app gets
+- Copy `.env.example` to `.env` at the repo root and fill in `SONIOX_API_KEY` (speech-to-text) and
+  `OPENROUTER_API_KEY` (Roman script / rewriting). Restart the app after changing it; Settings → Engines
+  shows whether each one is ready. Without keys the app still records and saves audio.
+- Only `apps/desktop/src/main/providers.ts` reads `.env`, and only when the app is **not packaged**.
+  Providers never read `process.env` themselves.
+- In production, vendor keys live **only on our backend** (`apps/api`, not built yet) and the app gets
   short-lived tokens. Keys must never ship inside the app.
-- Until the backend exists, local experiments may read a key from `process.env` **in the main process
-  only, and only when `!app.isPackaged`**. Keep it in a git-ignored `.env.local` or your shell.
-  Never use the `VITE_`, `MAIN_VITE_` or `RENDERER_VITE_` prefixes — electron-vite bakes those into the
-  build. Never commit a key (`.env*` is git-ignored; only `.env.example` may be committed).
+- Never use the `VITE_`, `MAIN_VITE_` or `RENDERER_VITE_` prefixes for keys — electron-vite bakes those
+  into the build. Never commit `.env` (it is git-ignored; only `.env.example` is committed).
 
 ## Testing tips
 

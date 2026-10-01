@@ -9,6 +9,7 @@ export type HelperMessage =
   | { type: "audio"; data: string; level: number; latencyMs?: number }
   | { type: "mic_started" }
   | { type: "mic_stopped" }
+  | { type: "pasted" }
   | { type: "permissions"; permissions: Record<string, string> }
   | { type: "error"; code: string; message: string };
 

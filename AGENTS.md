@@ -71,12 +71,16 @@ pnpm dev:web          # run the website on localhost:3000
 - Shells started from VS Code may have `ELECTRON_RUN_AS_NODE=1`, which makes Electron run as plain Node.
   If the app won't open, run `unset ELECTRON_RUN_AS_NODE` first.
 - Desktop dependencies all go in `devDependencies` so electron-vite bundles them. Native Node modules
-  (e.g. uiohook-napi on Windows, better-sqlite3 later) are the exception — put them in `dependencies` and
-  allow their install scripts under `allowBuilds` in `pnpm-workspace.yaml`.
+  (e.g. koffi on Windows, better-sqlite3 later) are the exception — put them in `dependencies`, mark them
+  `external` in `electron.vite.config.ts`, unpack them in `electron-builder.yml`, and allow their install
+  scripts under `allowBuilds` in `pnpm-workspace.yaml`.
+- Every package is imported on every OS. Never load an OS-specific library at import time (e.g.
+  `koffi.load("user32.dll")`) — load it on first use, or the app crashes on the other OS.
 - Line endings are LF everywhere (`.gitattributes`); Windows checkouts would otherwise fail the formatter.
 - Mac development needs Xcode or its Command Line Tools: `pnpm dev:desktop` builds the Swift helper first.
-- No `.env` is needed yet. Vendor keys belong on the backend; see "Environment variables" in
-  `docs/WINDOWS.md` for the dev-only rule.
+- API keys for development live in `.env` at the repo root (copy `.env.example`). Only
+  `apps/desktop/src/main/providers.ts` reads them, and only when the app is not packaged. In production
+  keys stay on the backend. Never commit `.env`, never use `VITE_`-prefixed variables for keys.
 - `DOWNLOAD_FILES` in `packages/shared` must match `artifactName` in `apps/desktop/electron-builder.yml`.
 - TypeScript is pinned to 5.9 on purpose (Next.js needs the JS compiler API).
 

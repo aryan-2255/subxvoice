@@ -6,6 +6,7 @@ let output = Output()
 let keys = KeyWatcher(output: output)
 let mic = MicCapture(output: output)
 let permissions = PermissionChecker()
+let paster = Paster(output: output)
 
 func handle(_ line: String) {
     guard let data = line.data(using: .utf8),
@@ -22,6 +23,8 @@ func handle(_ line: String) {
         mic.start()
     case "mic_stop":
         mic.stop()
+    case "paste":
+        paster.paste()
     case "permissions":
         output.send(["type": "permissions", "permissions": permissions.all()])
     case "request":

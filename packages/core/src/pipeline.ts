@@ -19,7 +19,8 @@ export interface PipelineDeps {
 }
 
 export type Outcome =
-  | { kind: "inserted"; record: SessionRecord }
+  /** `pasteError` is set when the text could not be typed; the dictation is still saved to history. */
+  | { kind: "inserted"; record: SessionRecord; pasteError?: string }
   | { kind: "command"; command: string; rest: string; context: AppContext }
   | { kind: "empty" };
 
@@ -125,7 +126,13 @@ export class Pipeline {
         : await this.transliterate(text, script);
     const llmMs = clock.lap();
 
-    await this.deps.inserter.insert(finalText);
+    // A failed paste must never lose what the user said: record it anyway and report the error.
+    let pasteError: string | undefined;
+    try {
+      await this.deps.inserter.insert(finalText);
+    } catch (error) {
+      pasteError = error instanceof Error ? error.message : String(error);
+    }
     const insertMs = clock.lap();
 
     const record: SessionRecord = {
@@ -138,7 +145,7 @@ export class Pipeline {
       timings: { sttMs, rulesMs, llmMs, insertMs, totalMs: sttMs + clock.total() },
     };
     await this.deps.history.save(record);
-    return { kind: "inserted", record };
+    return pasteError ? { kind: "inserted", record, pasteError } : { kind: "inserted", record };
   }
 
   private async rewrite(text: string, context: AppContext, script: ScriptPreference): Promise<string> {

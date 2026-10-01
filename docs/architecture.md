@@ -26,16 +26,16 @@ Every dictation is saved to local history: audio, text, app and per-stage timing
 | Rules | `core/rules.ts` | Dictionary corrections + spacing. Deterministic, ~1 ms, no AI. |
 | Router | `core/router.ts` | Trigger phrase at the start → command. Otherwise dictation. |
 | Style rewrite | `LlmProvider` plug | Only in style mode. Prompt in `core/prompts.ts`. |
-| Insert | `Platform.inserter` | Clipboard + Cmd/Ctrl+V, clipboard restored afterwards. |
+| Insert | `Platform.inserter` | Full clipboard snapshot → Cmd/Ctrl+V → user's clipboard restored. If pasting fails the dictation is still saved to history and the pill says why. |
 | History | `HistoryStore` plug | Local JSON file + WAV recordings today (`apps/desktop/src/main/stores.ts`); SQLite later. Timings per stage are recorded. |
 
 ## Plug points
 
 | Interface | File | Plugs today | Later |
 |---|---|---|---|
-| `SttProvider` | `contracts/stt.ts` | fake | Deepgram / Groq / Soniox…, local whisper.cpp, our own model |
-| `LlmProvider` | `contracts/llm.ts` | fake | Claude Haiku / Groq, our own model |
-| `Platform` (hotkey, microphone, inserter, permissions, context, desktop) | `contracts/platform.ts` | `platform-mac`: hotkey, mic, permissions via the Swift helper. `platform-win`: permissions, open URL; the rest are stubs | Paste, active-app context, focused text; C# helper on Windows if needed |
+| `SttProvider` | `contracts/stt.ts` | `soniox` (streaming), fake | Others via benchmark, local whisper.cpp, our own model |
+| `LlmProvider` | `contracts/llm.ts` | `openrouter`, fake | Our own model |
+| `Platform` (hotkey, microphone, inserter, permissions, context, desktop) | `contracts/platform.ts` | `platform-mac`: hotkey, mic, paste, permissions via the Swift helper. `platform-win`: hotkey + paste via koffi, permissions, open URL | Active-app context, focused text; C# helper on Windows if needed |
 | `Tool` + `ToolRegistry` | `contracts/tool.ts`, `tools.ts` | — | built-in commands, OS actions, MCP tools |
 | `HistoryStore`, `DictionaryStore` | `contracts/store.ts` | JSON files (`apps/desktop/src/main/stores.ts`), in-memory fakes for tests | SQLite (local), synced dictionary |
 
@@ -78,9 +78,10 @@ Windows (app windows, not the OS):
 
 `native/mac-helper` is a small Swift program the app starts once (`packages/platform-mac/src/helper.ts`).
 It does what Electron can't do well on macOS: detect the fn key (listen-only event tap, needs Input
-Monitoring), record the mic natively, and read the Input Monitoring permission. Protocol: one JSON
-object per line — commands on stdin (`watch`, `mic_start`, `mic_stop`, `permissions`, `request`), events
-on stdout (`key`, `audio`, `mic_started`, `mic_stopped`, `permissions`, `error`). It never reports which
+Monitoring), record the mic natively, send ⌘V for paste, and read the Input Monitoring permission.
+Protocol: one JSON object per line — commands on stdin (`watch`, `mic_start`, `mic_stop`, `paste`,
+`permissions`, `request`), events on stdout (`key`, `audio`, `mic_started`, `mic_stopped`, `pasted`,
+`permissions`, `error`). It never reports which
 ordinary key was pressed, only "other". A Windows helper, if built, should speak the same protocol.
 
 ## Where data lives

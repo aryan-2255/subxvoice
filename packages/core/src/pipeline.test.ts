@@ -53,6 +53,18 @@ describe("Pipeline", () => {
     expect(inserter.inserted).toEqual([]);
   });
 
+  it("keeps the dictation in history when pasting fails", async () => {
+    const { pipeline, inserter, history } = setup("testing sub x voice today");
+    inserter.insert = async () => {
+      throw new Error("no paste permission");
+    };
+
+    const outcome = await pipeline.process(audio, "exact", {});
+
+    expect(outcome).toMatchObject({ kind: "inserted", pasteError: "no paste permission" });
+    expect(history.records[0]?.finalText).toBe("testing SUBXVoice today");
+  });
+
   it("silence produces nothing", async () => {
     const { pipeline, inserter } = setup("   ");
     expect(await pipeline.process(audio, "exact", {})).toEqual({ kind: "empty" });

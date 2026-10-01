@@ -17,10 +17,15 @@
 
 ## Dictation flow (today)
 
-Hotkey (`platform.hotkey`) → `DictationController` (`src/main/dictation.ts`) → mic (`src/main/mic.ts`) →
-16 kHz chunks → clip saved as WAV in `userData/recordings` + a history record (`src/main/stores.ts`).
-The pill (`src/main/pill.ts` + `src/renderer/src/pill/`) shows state and the waveform (levels come from main).
-STT + paste plug in at the `ClipHandler` in `src/main/index.ts`.
+Key down (`platform.hotkey`) → `DictationController` (`src/main/dictation.ts`) opens the mic
+(`src/main/mic.ts`) **and** a pipeline session at the same time; audio streams to the STT plug while the
+user speaks (chunks that arrive before the stream is open are buffered). Key up → the session finishes:
+rules → (Roman-script / style LLM) → paste via `platform.inserter` → history. The WAV is attached to the
+history record afterwards, off the critical path. Engines come from `.env` via `src/main/providers.ts`;
+without keys every dictation is still recorded and saved, with no text.
+The pill (`src/main/pill.ts` + `src/renderer/src/pill/`) shows state, the waveform, then the words as heard.
+Settings (hotkey, script, microphone) live in `settings.json` (`JsonSettingsStore`, only explicit choices
+are saved).
 
 - Mic source: `platform.microphone` when the OS plug has one (Mac: Swift helper, on only while the key
   is held). Otherwise the Web Audio fallback in the pill (`MicRecorder`), which keeps the mic warm for
