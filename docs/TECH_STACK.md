@@ -6,7 +6,7 @@ One language everywhere: **TypeScript** (Python only for future ML work).
 | Area | Owner |
 |---|---|
 | macOS (platform-mac, Mac UI bits, mac-helper) | Aryan |
-| Windows (platform-win, Windows UI bits, win-helper) | Friend |
+| Windows (platform-win, Windows UI bits, win-helper) | Aryan's teammate — see [WINDOWS.md](WINDOWS.md) |
 | Core, providers, shared UI, backend, web | Both (changes via PR, reviewed by the other) |
 
 ## Desktop App
@@ -14,51 +14,50 @@ One language everywhere: **TypeScript** (Python only for future ML work).
 |---|---|
 | App shell | Electron + electron-vite |
 | Mic capture | Mac: Swift helper (AVAudioEngine), on only while the key is held. Fallback: Web Audio |
-| Hold-to-talk hotkey | Mac: Swift helper event tap, default fn (🌐). Windows: planned (uiohook-napi or C# helper) |
-| Paste at cursor | Electron clipboard + Cmd/Ctrl+V posted by the native helper |
-| Active app / title / URL | get-windows |
+| Hold-to-talk hotkey | Mac: Swift helper event tap, default fn (🌐). Windows: uiohook-napi, default Ctrl + Win (planned) |
+| Paste at cursor | Clipboard + Cmd/Ctrl+V — Mac: posted by the Swift helper; Windows: uiohook-napi `keyTap` (both planned) |
+| Active app / title / URL | get-windows (planned) |
 | Reading focused text, edit detection | Native helper — Swift (Mac, `native/mac-helper`), C# (Windows, planned) |
-| Local DB | SQLite (better-sqlite3) + Drizzle ORM |
-| Token storage | Electron safeStorage |
+| Local storage | JSON files + WAV recordings today (`apps/desktop/src/main/stores.ts`); SQLite + Drizzle later |
+| Token storage | Electron safeStorage (planned, with login) |
 | Installer | electron-builder — DMG (Mac), NSIS .exe (Windows) |
-| Auto-update | electron-updater + GitHub Releases |
+| Auto-update | electron-updater + GitHub Releases (planned) |
 
 Rule: the renderer (UI) never touches the DB, network or OS directly — it asks the main process through a typed preload bridge.
 
 ## GUI (same on Mac and Windows)
+In use today:
+
 | Part | Tech |
 |---|---|
 | Framework | React + TypeScript |
-| Styling | Tailwind CSS v4 |
-| Components | shadcn/ui (Radix-based, code lives in our repo) |
-| Icons | lucide-react |
-| Animation (recording pill, transitions) | Motion (Framer Motion) |
-| State | Zustand |
-| Server data | TanStack Query |
-| Routing (main window) | TanStack Router (hash history) |
-| Forms (settings, dictionary) | react-hook-form + Zod |
-| Stats charts | shadcn charts (Recharts) |
-| Audio playback + waveform in history | wavesurfer.js |
-| Long history list | TanStack Virtual |
-| UI translations (later) | i18next |
-| Design | Figma |
+| Styling | Tailwind CSS v4 with design tokens in `renderer/src/styles.css` (cobalt accent is reserved for voice) |
+| Icons | Small inline SVG set in `renderer/src/shared/icons.tsx` |
+| Navigation | Plain React state (four pages) |
+| Charts | The "voice strip" bars are plain divs |
+| Audio playback | `<audio>` with a Blob of the local WAV |
+| Font | system-ui (SF Pro on Mac, Segoe UI on Windows) |
+
+Add these only when a screen actually needs them: shadcn/ui (components), Motion (animation), Zustand
+(shared state), TanStack Query (backend data), TanStack Router (more pages), react-hook-form + Zod (big
+forms), Recharts (real charts), wavesurfer.js (waveforms), TanStack Virtual (very long lists), i18next.
 
 ### App windows
 | Window | Notes |
 |---|---|
-| Main window | Home (stats), History, Dictionary, Shortcuts, Settings, Account |
-| Recording pill | Small, transparent, always on top, **never takes focus** (otherwise the paste goes to the wrong app) |
-| Onboarding | Permission steps + first test dictation |
-| Command popup | "What should the email be about?" — near the cursor, also non-focusing |
-| Tray / menu bar | Electron Tray + native menu |
+| Main window | Built: Home (stats), History, Dictionary, Settings. Planned: Shortcuts, Account |
+| Recording pill | Built: small, transparent, always on top, **never takes focus** (otherwise the paste goes to the wrong app) |
+| Permissions | Built into Settings (plus a banner on Home when one is missing). A first-run walkthrough is planned |
+| Command popup | Planned: "What should the email be about?" — near the cursor, also non-focusing |
+| Tray / menu bar | Built: Electron Tray with Open / Quit |
 
 ### Only these parts differ per OS (`platform/mac`, `platform/win`)
 | | Mac | Windows |
 |---|---|---|
 | Icon location | Menu bar (monochrome template icon), optional hidden Dock icon | System tray |
-| Title bar | `hiddenInset` + traffic lights, vibrancy | `titleBarOverlay`, Mica material (Win 11) |
-| Onboarding | Mic, Accessibility, Input Monitoring | Mic |
-| Shortcut labels | ⌘ ⌥ Fn | Ctrl Alt Win |
+| Title bar | `hiddenInset` + traffic lights | Native title bar today; `titleBarOverlay` / Mica later |
+| Permissions | Mic, Accessibility, Input Monitoring | Mic |
+| Default hotkey | fn (🌐) | Ctrl + Win |
 | Font | system-ui → SF Pro | system-ui → Segoe UI Variable |
 
 ## Backend
@@ -133,10 +132,12 @@ Nothing is built for this now. The design just keeps it possible:
 - A setting would choose Cloud / Auto / Offline.
 
 ## Build Order
-1. Plug-point interfaces + STT benchmark
-2. Desktop core on Mac (hotkey → mic → STT → paste) + recording pill
-3. Local history + dictionary
-4. Backend (login + sync + stats)
-5. Windows plugs
-6. Website
-7. Teams, MCP
+1. ✅ Plug-point interfaces, pipeline, rules, router (unit-tested)
+2. ✅ Mac: fn hotkey + native mic (Swift helper), recording pill, tray, dashboard
+3. ✅ Local history (with audio playback) + dictionary
+4. ✅ Website with download buttons
+5. ⏳ Speech-to-text provider + benchmark → paste at the cursor (next, Mac)
+6. ⏳ Windows plugs — in parallel, see [WINDOWS.md](WINDOWS.md)
+7. ⏳ Style mode (LLM), voice commands
+8. ⏳ Backend (login, sync, stats), installers, signing, auto-update
+9. ⏳ Teams, MCP

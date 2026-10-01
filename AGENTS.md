@@ -4,7 +4,12 @@ SUBXVoice is a voice-typing desktop app for **macOS and Windows**: hold a hotkey
 switching mid-sentence is fine), and clean text is pasted at the cursor in any app. Later: voice
 commands ("write a mail"), actions via MCP, history with audio replay, stats, teams.
 
+**Start here:** [`readme.md`](readme.md) shows what works today. Working on the **Windows** side? Read
+[`docs/WINDOWS.md`](docs/WINDOWS.md) first — it has the setup, what you own and the task list.
 Read `docs/architecture.md` before changing anything in `packages/core`.
+
+Team: Aryan owns macOS (`platform-mac`, `native/mac-helper`); his teammate owns Windows (`platform-win`).
+Everything else is shared and changes through pull requests reviewed by the other person.
 
 ## Repo map
 
@@ -65,8 +70,13 @@ pnpm dev:web          # run the website on localhost:3000
 
 - Shells started from VS Code may have `ELECTRON_RUN_AS_NODE=1`, which makes Electron run as plain Node.
   If the app won't open, run `unset ELECTRON_RUN_AS_NODE` first.
-- Desktop dependencies all go in `devDependencies` so electron-vite bundles them. Native modules
-  (uiohook-napi, better-sqlite3) will be the exception — they must go in `dependencies`.
+- Desktop dependencies all go in `devDependencies` so electron-vite bundles them. Native Node modules
+  (e.g. uiohook-napi on Windows, better-sqlite3 later) are the exception — put them in `dependencies` and
+  allow their install scripts under `allowBuilds` in `pnpm-workspace.yaml`.
+- Line endings are LF everywhere (`.gitattributes`); Windows checkouts would otherwise fail the formatter.
+- Mac development needs Xcode or its Command Line Tools: `pnpm dev:desktop` builds the Swift helper first.
+- No `.env` is needed yet. Vendor keys belong on the backend; see "Environment variables" in
+  `docs/WINDOWS.md` for the dev-only rule.
 - `DOWNLOAD_FILES` in `packages/shared` must match `artifactName` in `apps/desktop/electron-builder.yml`.
 - TypeScript is pinned to 5.9 on purpose (Next.js needs the JS compiler API).
 
