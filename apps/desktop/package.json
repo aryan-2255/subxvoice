@@ -10,7 +10,8 @@
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "dist:mac": "node scripts/build-mac-helper.mjs --universal && electron-vite build && electron-builder --mac",
-    "dist:win": "electron-vite build && electron-builder --win"
+    "dist:win": "electron-vite build && electron-builder --win",
+    "test": "vitest run"
   },
   "devDependencies": {
     "@subx/core": "workspace:*",
@@ -29,7 +30,8 @@
     "react-dom": "19.2.8",
     "tailwindcss": "^4.3.3",
     "typescript": "^5.9.3",
-    "vite": "^7.3.6"
+    "vite": "^7.3.6",
+    "vitest": "^5.0.2"
   },
   "dependencies": {
     "koffi": "^3.3.2"

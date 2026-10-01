@@ -111,7 +111,8 @@ export class JsonDictionaryStore implements DictionaryStore {
 export class JsonSettingsStore<T extends object> {
   private readonly file: JsonFile<Partial<T>>;
   private readonly defaults: T;
-  private current: T | null = null;
+  /** Only the fields the user has explicitly set — never the defaults themselves. */
+  private stored: Partial<T> | null = null;
 
   constructor(path: string, defaults: T) {
     this.file = new JsonFile(path, {});
@@ -119,15 +120,16 @@ export class JsonSettingsStore<T extends object> {
   }
 
   async all(): Promise<T> {
-    // Unknown keys from an older build are dropped; missing ones fall back to the default.
-    this.current ??= { ...this.defaults, ...(await this.file.read()) };
-    return this.current;
+    // Defaults are applied live on every read, so a field the user never chose always tracks the
+    // current default — changing a default takes effect instead of being frozen in the saved file.
+    this.stored ??= await this.file.read();
+    return { ...this.defaults, ...this.stored };
   }
 
   async update(patch: Partial<T>): Promise<T> {
-    const next = { ...(await this.all()), ...patch };
-    this.current = next;
-    await this.file.write(next);
-    return next;
+    this.stored ??= await this.file.read();
+    this.stored = { ...this.stored, ...patch };
+    await this.file.write(this.stored); // persist only what was explicitly set
+    return { ...this.defaults, ...this.stored };
   }
 }
