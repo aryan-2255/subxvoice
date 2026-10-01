@@ -7,16 +7,19 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
-    "@subx/core": "workspace:*"
+    "@subx/core": "workspace:*",
+    "koffi": "^3.3.2"
   },
   "peerDependencies": {
     "electron": "*"
   },
   "devDependencies": {
     "@types/node": "^24.19.0",
-    "electron": "^44.4.5"
+    "electron": "^44.4.5",
+    "vitest": "^5.0.2"
   }
 }

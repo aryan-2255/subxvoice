@@ -7,6 +7,13 @@ export interface AudioClip {
 /** Chosen by the hotkey: keep the user's exact words, or rewrite them in their style. */
 export type Mode = "exact" | "style";
 
+/**
+ * How non-Latin speech is written down. "native" keeps the language's own script (Devanagari for
+ * Hindi); "roman" spells it phonetically in Latin letters (Hinglish). This is transliteration, not
+ * translation — the words stay the user's.
+ */
+export type ScriptPreference = "native" | "roman";
+
 /** What the user is looking at while speaking. Every field is optional — OS support varies. */
 export interface AppContext {
   appName?: string;

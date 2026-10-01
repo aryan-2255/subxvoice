@@ -60,6 +60,16 @@ export class JsonHistoryStore implements HistoryStore {
     await this.file.write(this.records);
   }
 
+  /** The pipeline writes the record; the app saves the audio afterwards, off the critical path. */
+  async attachAudio(id: string, audioPath: string, audioMs: number): Promise<void> {
+    const records = await this.load();
+    const record = records.find((item) => item.id === id);
+    if (!record) return;
+    record.audioPath = audioPath;
+    record.audioMs = audioMs;
+    await this.file.write(records);
+  }
+
   private async load(): Promise<SessionRecord[]> {
     this.records ??= await this.file.read();
     return this.records;
@@ -95,5 +105,31 @@ export class JsonDictionaryStore implements DictionaryStore {
   private async load(): Promise<DictionaryEntry[]> {
     this.entries ??= await this.file.read();
     return this.entries;
+  }
+}
+
+export class JsonSettingsStore<T extends object> {
+  private readonly file: JsonFile<Partial<T>>;
+  private readonly defaults: T;
+  /** Only the fields the user has explicitly set — never the defaults themselves. */
+  private stored: Partial<T> | null = null;
+
+  constructor(path: string, defaults: T) {
+    this.file = new JsonFile(path, {});
+    this.defaults = defaults;
+  }
+
+  async all(): Promise<T> {
+    // Defaults are applied live on every read, so a field the user never chose always tracks the
+    // current default — changing a default takes effect instead of being frozen in the saved file.
+    this.stored ??= await this.file.read();
+    return { ...this.defaults, ...this.stored };
+  }
+
+  async update(patch: Partial<T>): Promise<T> {
+    this.stored ??= await this.file.read();
+    this.stored = { ...this.stored, ...patch };
+    await this.file.write(this.stored); // persist only what was explicitly set
+    return { ...this.defaults, ...this.stored };
   }
 }

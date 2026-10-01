@@ -7,5 +7,6 @@ allowBuilds:
   electron: true
   electron-winstaller: false
   esbuild: true
+  koffi: true  # ships prebuilt binaries; its install script only picks the right one
   sharp: false
   unrs-resolver: false

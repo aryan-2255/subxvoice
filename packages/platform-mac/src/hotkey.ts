@@ -24,6 +24,10 @@ export class MacHotkey implements Hotkey {
     return [{ keys: "fn", mode: "exact" }];
   }
 
+  supportedKeys(): string[] {
+    return [...SUPPORTED];
+  }
+
   async register(bindings: HotkeyBinding[], onEvent: (event: HotkeyEvent) => void): Promise<void> {
     for (const { keys } of bindings) {
       if (!SUPPORTED.has(keys)) throw new SubxError("unsupported", `Unsupported hotkey: ${keys}`);

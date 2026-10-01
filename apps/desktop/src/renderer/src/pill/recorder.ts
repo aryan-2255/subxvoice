@@ -6,9 +6,17 @@ import workletUrl from "./pcm-worklet?worker&url";
 const WARM_MS = 60_000;
 const PRE_ROLL_CHUNKS = 6; // 6 × 50 ms = 300 ms before the key press
 
-const MIC_CONSTRAINTS: MediaStreamConstraints = {
-  audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+const AUDIO: MediaTrackConstraints = {
+  channelCount: 1,
+  echoCancellation: true,
+  noiseSuppression: true,
+  autoGainControl: true,
 };
+
+/** Falls back to the system default if the chosen device has been unplugged. */
+const constraints = (deviceId: string): MediaStreamConstraints => ({
+  audio: deviceId ? { ...AUDIO, deviceId: { ideal: deviceId } } : AUDIO,
+});
 
 type WorkletMessage = { type: "chunk"; samples: Int16Array; level: number } | { type: "flushed" };
 
@@ -23,6 +31,18 @@ export class MicRecorder {
   private closeTimer: ReturnType<typeof setTimeout> | undefined;
   private recording = false;
   private preRoll: Int16Array[] = [];
+  private deviceId = "";
+
+  constructor() {
+    const apply = (settings: { microphoneId: string }) => {
+      if (settings.microphoneId === this.deviceId) return;
+      this.deviceId = settings.microphoneId;
+      // Drop the warm mic so the next dictation opens the newly chosen device.
+      if (!this.recording) this.closeMic();
+    };
+    void window.subx.settings.get().then(apply);
+    window.subx.settings.onChanged(apply);
+  }
 
   async start(): Promise<void> {
     clearTimeout(this.closeTimer);
@@ -71,7 +91,7 @@ export class MicRecorder {
   private openMic(): Promise<AudioWorkletNode> {
     this.mic ??= (async () => {
       const [stream, context] = await Promise.all([
-        navigator.mediaDevices.getUserMedia(MIC_CONSTRAINTS),
+        navigator.mediaDevices.getUserMedia(constraints(this.deviceId)),
         this.audioContext(),
       ]);
       await context.resume();
