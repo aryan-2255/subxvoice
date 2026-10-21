@@ -5,7 +5,7 @@
 // repo root keeps development working. Only the token source changes later — nothing else.
 import { join } from "node:path";
 import type { LlmProvider, SttProvider } from "@subx/core";
-import { createLlm, createStt } from "@subx/providers";
+import { createLlm, createStt, isSonioxRegion } from "@subx/providers";
 import { app } from "electron";
 
 export interface Engines {
@@ -35,8 +35,15 @@ export function createEngines(): Engines {
 
   const sttToken = process.env.SONIOX_API_KEY?.trim();
   if (sttToken) {
+    // A Soniox key is bound to its project's region and is rejected elsewhere, so the region must
+    // match the key. The India region connects far faster from India (see the Soniox provider).
+    const regionEnv = process.env.SONIOX_REGION?.trim().toLowerCase();
+    if (regionEnv && !isSonioxRegion(regionEnv)) {
+      problems.push(`Ignoring SONIOX_REGION="${regionEnv}": expected us, eu, jp or in.`);
+    }
+    const region = regionEnv && isSonioxRegion(regionEnv) ? regionEnv : "in";
     try {
-      stt = createStt({ id: "soniox", token: sttToken, model: process.env.SONIOX_MODEL });
+      stt = createStt({ id: "soniox", token: sttToken, model: process.env.SONIOX_MODEL, region });
     } catch (error) {
       problems.push(describe("Speech-to-text", error));
     }

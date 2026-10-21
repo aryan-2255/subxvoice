@@ -7,7 +7,25 @@ import {
   type Transcript,
 } from "@subx/core";
 
-const DEFAULT_URL = "wss://stt-rt.soniox.com/transcribe-websocket";
+/**
+ * Soniox data-residency regions. A key belongs to the project's region and is rejected (401) on
+ * any other region's endpoint, so the region must always be set together with the key.
+ * Measured from India: the "in" endpoint connects ~7x faster than "us" (146 ms vs 1016 ms) and
+ * finalises after release in ~50 ms instead of ~330 ms.
+ */
+export const SONIOX_REGIONS = {
+  us: "wss://stt-rt.soniox.com/transcribe-websocket",
+  eu: "wss://stt-rt.eu.soniox.com/transcribe-websocket",
+  jp: "wss://stt-rt.jp.soniox.com/transcribe-websocket",
+  in: "wss://stt-rt.in.soniox.com/transcribe-websocket",
+} as const;
+
+export type SonioxRegion = keyof typeof SONIOX_REGIONS;
+
+export function isSonioxRegion(value: string): value is SonioxRegion {
+  return value in SONIOX_REGIONS;
+}
+
 const DEFAULT_MODEL = "stt-rt-v5";
 const OPEN_TIMEOUT_MS = 8000;
 const FINALISE_TIMEOUT_MS = 5000;
@@ -19,6 +37,9 @@ export interface SonioxOptions {
   /** Short-lived token from our backend, or a dev key from the environment. */
   token: string;
   model?: string;
+  /** Region of the project the token belongs to. Defaults to "us". */
+  region?: SonioxRegion;
+  /** Full endpoint override; wins over `region`. */
   baseUrl?: string;
   /**
    * Languages to bias recognition toward. These are hints, not a restriction, so other languages
@@ -96,7 +117,7 @@ class SonioxStream implements SttStream {
       this.settleFinish = resolve;
     });
 
-    this.socket = new WebSocket(connection.baseUrl ?? DEFAULT_URL);
+    this.socket = new WebSocket(connection.baseUrl ?? SONIOX_REGIONS[connection.region ?? "us"]);
     this.socket.binaryType = "arraybuffer";
 
     this.socket.onopen = () => {

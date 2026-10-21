@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 import { createLlm, createStt } from "./index";
 
 const sonioxKey = process.env.SONIOX_API_KEY?.trim();
+const sonioxRegion = (process.env.SONIOX_REGION?.trim().toLowerCase() || "in") as "us" | "eu" | "jp" | "in";
 const openRouterKey = process.env.OPENROUTER_API_KEY?.trim();
 const audioPath = process.env.SUBX_TEST_AUDIO?.trim();
 
@@ -32,7 +33,7 @@ function readWav(path: string): Int16Array {
 
 describe.skipIf(!sonioxKey)("Soniox (live)", () => {
   it("connects, authenticates and finishes cleanly", async () => {
-    const stt = createStt({ id: "soniox", token: sonioxKey });
+    const stt = createStt({ id: "soniox", token: sonioxKey, region: sonioxRegion });
     // Half a second of silence: no words expected, but the whole protocol is exercised.
     const transcript = await stt.transcribe(
       { samples: new Int16Array(SAMPLE_RATE / 2), sampleRate: SAMPLE_RATE },
@@ -51,7 +52,7 @@ describe.skipIf(!sonioxKey)("Soniox (live)", () => {
   it.skipIf(!audioPath)(
     "transcribes real speech",
     async () => {
-      const stt = createStt({ id: "soniox", token: sonioxKey });
+      const stt = createStt({ id: "soniox", token: sonioxKey, region: sonioxRegion });
       const transcript = await stt.transcribe(
         { samples: readWav(audioPath as string), sampleRate: SAMPLE_RATE },
         { vocabulary: [] },

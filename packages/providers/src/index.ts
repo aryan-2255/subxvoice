@@ -1,7 +1,7 @@
 import { type LlmProvider, type SttProvider, SubxError } from "@subx/core";
 import { FakeLlm, FakeStt } from "@subx/core/fakes";
 import { OpenRouterLlm } from "./llm/openrouter";
-import { SonioxStt } from "./stt/soniox";
+import { type SonioxRegion, SonioxStt } from "./stt/soniox";
 
 export interface ProviderConfig {
   /** e.g. "soniox", "openrouter", "fake". */
@@ -10,6 +10,8 @@ export interface ProviderConfig {
   /** Short-lived token from our backend — never a raw vendor API key. */
   token?: string;
   baseUrl?: string;
+  /** Soniox data-residency region the token belongs to ("us" | "eu" | "jp" | "in"). */
+  region?: SonioxRegion;
   /** Pin the upstream provider where the vendor routes to several (OpenRouter). */
   only?: string[];
   /** Preferred upstream providers in order, with fallback (OpenRouter). */
@@ -27,6 +29,7 @@ export function createStt(config: ProviderConfig): SttProvider {
       return new SonioxStt({
         token: requireToken(config, "Soniox"),
         model: config.model,
+        region: config.region,
         baseUrl: config.baseUrl,
         languageHints: config.languageHints,
       });
@@ -60,4 +63,10 @@ function requireToken(config: ProviderConfig, name: string): string {
 }
 
 export { OpenRouterLlm, type OpenRouterOptions } from "./llm/openrouter";
-export { type SonioxOptions, SonioxStt } from "./stt/soniox";
+export {
+  isSonioxRegion,
+  SONIOX_REGIONS,
+  type SonioxOptions,
+  type SonioxRegion,
+  SonioxStt,
+} from "./stt/soniox";

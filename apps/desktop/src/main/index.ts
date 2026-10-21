@@ -2,14 +2,10 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
-  type AudioClip,
   type DictionaryEntry,
-  type HistoryStore,
   type HotkeyBinding,
-  type Mode,
   type PermissionKind,
   Pipeline,
-  type SessionRecord,
   SubxError,
 } from "@subx/core";
 import { app, BrowserWindow, ipcMain, shell, type Tray } from "electron";
@@ -29,6 +25,7 @@ import { deleteRecording, recordingsDir, saveRecording } from "./recordings";
 import { loadPage, PRELOAD_PATH } from "./renderer";
 import { JsonDictionaryStore, JsonHistoryStore, JsonSettingsStore } from "./stores";
 import { createTray } from "./tray";
+import { createWorkflow } from "./workflow";
 
 const HOTKEY_RETRY_MS = 3000;
 
@@ -74,22 +71,6 @@ function assertPermissionKind(kind: unknown): PermissionKind {
     throw new Error(`Unknown permission: ${String(kind)}`);
   }
   return kind as PermissionKind;
-}
-
-/** When no STT is configured, history still records the clip so nothing the user said is lost. */
-async function saveSilentRecord(history: HistoryStore, mode: Mode, clip: AudioClip): Promise<string> {
-  const record: SessionRecord = {
-    id: randomUUID(),
-    createdAt: Date.now(),
-    mode,
-    context: {},
-    rawText: "",
-    finalText: "",
-    audioMs: Math.round((clip.samples.length / clip.sampleRate) * 1000),
-    timings: { sttMs: 0, rulesMs: 0, llmMs: 0, insertMs: 0, totalMs: 0 },
-  };
-  await history.save(record);
-  return record.id;
 }
 
 function assertString(value: unknown, name: string): string {
@@ -201,52 +182,23 @@ async function start(): Promise<void> {
       })
     : null;
 
-  const keepAudio = async (clip: AudioClip, id: string) => {
-    // Saved after the text is already at the cursor, so disk I/O never delays the paste.
-    const audioMs = Math.round((clip.samples.length / clip.sampleRate) * 1000);
-    await history.attachAudio(id, await saveRecording(clip), audioMs);
-    notifyHistoryChanged();
-  };
-
-  const dictation = new DictationController(pill, mic, {
-    async open(mode) {
-      // STT stream and the LLM connection open now, on key-press, so release→paste is just the tail.
-      if (!pipeline) {
-        return {
-          push: () => {},
-          finish: async (clip) => {
-            await keepAudio(clip, await saveSilentRecord(history, mode, clip));
-            return engines.problems[0] ?? "Speech-to-text is not configured";
-          },
-          cancel: () => {},
-        };
-      }
-      const { script } = await settings.all();
-      const context = await platform.context.current().catch(() => ({}));
-      const session = await pipeline.open(mode, context, {
-        script,
-        // Show the words as heard while the model is still cleaning them up.
-        onTranscript: (text) => pill.setState({ kind: "processing", message: text }),
-      });
-      return {
-        push: (samples) => session.push(samples),
-        finish: async (clip) => {
-          const outcome = await session.finish();
-          if (outcome.kind === "empty") return "Nothing heard";
-          if (outcome.kind === "command") return `Command: ${outcome.command}`;
-          notifyHistoryChanged();
-          void keepAudio(clip, outcome.record.id);
-          // Saved to history either way; the pill shows why the text didn't appear.
-          if (outcome.pasteError) throw new Error(outcome.pasteError);
-          return outcome.record.finalText;
-        },
-        cancel: () => {
-          // Drain the stream so the socket closes instead of leaking.
-          void session.finish().catch(() => {});
-        },
-      };
-    },
-  });
+  const dictation = new DictationController(
+    pill,
+    mic,
+    createWorkflow({
+      pipeline,
+      problems: engines.problems,
+      settings,
+      context: platform.context,
+      history,
+      saveRecording,
+      newId: randomUUID,
+      // Show the words as heard while the model is still cleaning them up.
+      onHeard: (text) => pill.setState({ kind: "processing", message: text }),
+      onHistoryChanged: notifyHistoryChanged,
+      log: (line) => console.log(line),
+    }),
+  );
 
   ipcMain.handle(IPC.settingsGet, () => settings.all());
   ipcMain.handle(IPC.settingsSet, async (_event, patch: unknown) => {
