@@ -89,7 +89,7 @@ describe("Pipeline", () => {
       await pipeline.process(audio, "exact", {}, { script: "roman" });
 
       expect(inserter.inserted).toEqual(["main theek hoon"]);
-      expect(llm.requests[0]?.system).toMatch(/transliteration/i);
+      expect(llm.requests[0]?.system).toMatch(/Latin letters/);
     });
 
     it("transliterates by default (Roman is the out-of-the-box behaviour)", async () => {

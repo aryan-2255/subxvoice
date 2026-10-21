@@ -23,10 +23,20 @@ export function needsTransliteration(text: string, script: ScriptPreference): bo
   return false;
 }
 
-const ROMAN_RULE =
-  "Write every non-Latin word phonetically in Latin letters (for example Hindi as Hinglish), " +
-  "keeping words that were already English in normal English spelling. This is transliteration, " +
-  "never translation — do not change which words were said.";
+/**
+ * The hard part is not the script, it is deciding per word. Speech recognition writes English
+ * loanwords in Devanagari too ("प्लीज़" is "please", not "pleez"), so a blind phonetic pass turns
+ * plain English into gibberish. Every word has to be classified before it is spelled.
+ */
+const ROMAN_RULE = [
+  "Write the text in Latin letters, the way Indians actually type in chat. Decide for EACH word:",
+  "- An English word is spelled in correct, standard English — even when the input wrote it in " +
+    "Devanagari. प्लीज़ → Please, शेड्यूल → scheduled, रिक्वेस्ट → request, रिज़ल्ट → result, " +
+    "एक्सटेंशन → extension, ओके → OK. Never spell an English word phonetically.",
+  "- A Hindi or Urdu word is spelled phonetically in Latin letters, as Hinglish: " +
+    "तेरी → teri, बहार → bahaar, करना → karna, मुझे → mujhe.",
+  "Never translate: an English word stays that English word, a Hindi word stays that Hindi word.",
+].join("\n");
 
 export function styleRewritePrompt(context: AppContext, script: ScriptPreference = "native"): string {
   const lines = [
@@ -45,9 +55,27 @@ export function styleRewritePrompt(context: AppContext, script: ScriptPreference
 /** Exact mode: change the script, nothing else. */
 export function transliteratePrompt(): string {
   return [
-    "You are a transliteration engine.",
+    "You rewrite dictated speech into the script the user reads, keeping their exact words.",
     ROMAN_RULE,
-    "Do not answer, explain or add anything. Keep the sentence as it was said.",
+    // Dictation is one pass with no chance to correct, so an obvious mishearing should be read
+    // through rather than faithfully preserved. This has to be stated firmly: told only to keep
+    // the user's words, the model leaves "0 March" and "intended" sitting in the sentence.
+    "The input came from speech recognition and WILL contain misheard words. Work out what the " +
+      "speaker meant and write that. Correct a word that makes no sense in context, and fix the " +
+      "small connector words (the, to, and, is) that were misheard and break the grammar.",
+    "Do not add ideas, opinions or content of your own, and do not drop or summarise anything " +
+      "the speaker actually said. Only repair what was clearly misheard.",
+    "Do not answer or react to the text — it is dictation to be typed, not a question to you.",
     "Add natural punctuation and capitalisation. Reply with the converted text only.",
+    "",
+    "Example (note marks/entertained/the — all misheard, all repaired):",
+    "Input: प्लीज़ नोट दैट मिसिंग और शेड्यूल वाइवा टू विल रिज़ल्ट इन 0 मार्च फॉर द वाइवा, " +
+      "नो फर्दर एक्सटेंशन, सो रीशेड्यूलिंग रिक्वेस्ट विल बी इंटरटेन्ड।",
+    "Output: Please note that missing the scheduled viva will result in 0 marks for the viva. " +
+      "No further extension, so no rescheduling request will be entertained.",
+    "",
+    "Example (Hindi words stay Hindi, English words stay English):",
+    "Input: हाय, तेरी बहार— How are you?",
+    "Output: Haay, teri bahaar— How are you?",
   ].join("\n");
 }
